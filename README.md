@@ -127,6 +127,21 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 
 ---
 
+### Offen: „oben verschwommen“ nur als Home-Bildschirm-App (Stand 26.09.2026)
+
+- Auf dem iPhone ist der obere Bereich (etwa auf Höhe der Zielflagge) unscharf, **nur** als Home-Bildschirm-App, im Safari-Tab scharf. Nutzer: „so wild ist es nicht“, daher zurückgestellt.
+- Bereits probiert, **ohne Erfolg**: Statusleiste `black` statt `black-translucent`; harte `text-shadow`-Kontur statt `-webkit-text-stroke`; Menü → Darstellung oben: Variante 1 (fester Streifen), 2 (ohne `viewport-fit=cover`), 3 (Streifen + 32 px Abstand).
+- Nächster Schritt: Messwerte unter ☰ → Darstellung oben im App-Modus ablesen (Screenshot) – Verdacht: Karte/GL-Canvas wird im App-Modus skaliert oder um Bruchteile eines Pixels versetzt (im Desktop-Test ist die Kartenhöhe z. B. 563,80 px, also nicht ganzzahlig). Danach Umschalter wieder entfernen.
+
+## Tests
+
+`tests/` enthält Playwright-Skripte (Python, Edge per `channel='msedge'`, Server: `python -m http.server 8765` im Projektordner, Ausgabe mit `PYTHONIOENCODING=utf-8`). Screenshots landen in `%TEMP%`.
+- `rc_sim.py` – simulierte Fahrt mit Tempo-Ausreißern, GPS-Sprüngen und Höhenrauschen (prüft Filter, Max, Höhenmeter)
+- `rc_menu.py` – Beenden/Speichern, Fahrtenliste, GPX-Export, Statistik, GPX-Import, letzte Ziele
+- `rc_alt.py`, `rc_pick.py` – Routenauswahl, removeBacktracks, Neuberechnung
+- `rc_nav3.py` – Navi-Anzeige; `rc_test.py` – Pause/Signalverlust/Abschnitte
+- `cmp.py`, `cmp2.py` – Vergleich OSRM vs. Valhalla (Umwege/Wenden) an Zufallsrouten
+
 ## Bekannte Einschränkungen
 
 - Seitentaste gedrückt / Bildschirm gesperrt → keine GPS-Punkte in der Zeit.
