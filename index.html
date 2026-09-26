@@ -26,17 +26,17 @@
   /* OSM-Standardkarte per Filter abdunkeln (Strecke/Marker liegen in anderen Ebenen und bleiben farbig) */
   .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)}
   button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-  .dash{padding:14px max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:12px}
+  .dash{padding:10px max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:8px}
   .speed{display:flex;align-items:baseline;justify-content:center;gap:8px}
-  .speed .val{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:clamp(72px,24vw,120px);line-height:1;letter-spacing:-2px}
-  .speed .unit{color:var(--muted);font-size:18px}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  .cell{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
-  .cell .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-  .cell .v{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:500;margin-top:4px}
-  .cell .v small{font-size:12px;color:var(--muted);font-family:Inter,sans-serif}
-  .btns{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}
-  button{font:600 16px Inter,sans-serif;border:0;border-radius:12px;padding:16px 8px;cursor:pointer;color:var(--bg);background:var(--accent)}
+  .speed .val{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:clamp(56px,18vw,96px);line-height:1;letter-spacing:-2px}
+  .speed .unit{color:var(--muted);font-size:16px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .cell{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 6px;text-align:center}
+  .cell .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .cell .v{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:500;margin-top:2px}
+  .cell .v small{font-size:11px;color:var(--muted);font-family:Inter,sans-serif}
+  .btns{display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px}
+  button{font:600 15px Inter,sans-serif;border:0;border-radius:10px;padding:12px 8px;cursor:pointer;color:var(--bg);background:var(--accent)}
   button.sec{background:var(--panel);color:var(--text);border:1px solid var(--line)}
   button.pause{background:var(--warn)}
   .status{font-size:12px;color:var(--muted);text-align:center;min-height:16px}
