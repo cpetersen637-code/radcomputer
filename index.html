@@ -11,6 +11,14 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
 <title>Radcomputer</title>
+<script>
+// Darstellung oben (gegen den Weichzeichner, den iOS als Home-Bildschirm-App unter die Statusleiste legt).
+// Variante wird im Menü gewählt und vor dem ersten Zeichnen angewendet.
+(function(){ var v = '1'; try { v = localStorage.getItem('topfix') || '1'; } catch(e) {}
+  document.documentElement.setAttribute('data-topfix', v);
+  if (v === '2') document.querySelector('meta[name=viewport]').setAttribute('content', 'width=device-width, initial-scale=1, user-scalable=no');
+})();
+</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -22,6 +30,12 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden}
   body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+  /* fester, deckender Streifen hinter der Statusleiste; Variante 3 zusätzlich 32 px Abstand */
+  #topShield{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:var(--bg);z-index:5000;pointer-events:none}
+  html[data-topfix="2"] #topShield{display:none}
+  html[data-topfix="3"] body{padding-top:calc(env(safe-area-inset-top) + 32px)}
+  html[data-topfix="3"] #topShield{height:calc(env(safe-area-inset-top) + 32px)}
+  .mi.on{border-color:var(--accent)} .mi.on::after{content:'✓';color:var(--accent);font-size:16px}
   [hidden]{display:none!important}
   #mapWrap{flex:1;min-height:30vh;position:relative;border-bottom:1px solid var(--line)}
   #map{position:absolute;inset:0}
@@ -125,6 +139,7 @@
 </style>
 </head>
 <body>
+<div id="topShield"></div>
 <div id="mapWrap">
   <div id="map"></div>
   <div id="navBar" hidden>
@@ -142,6 +157,7 @@
       <button class="mi" data-go="gpx">Routen (GPX)</button>
       <button class="mi" data-go="rides">Gefahrene Fahrten</button>
       <button class="mi" data-go="stats">Statistik</button>
+      <button class="mi" data-go="topfix">Darstellung oben</button>
       <button class="mi warn" id="mNavEnd">Navigation beenden</button>
     </div>
     <div class="mview" data-v="dest" data-t="Ziel suchen" hidden>
@@ -161,6 +177,12 @@
       <div class="mrow"><button class="sec" id="rideFollow">Nachfahren</button><button class="sec" id="rideShare">GPX teilen</button><button class="danger" id="rideDel">Löschen</button></div>
     </div>
     <div class="mview" data-v="stats" data-t="Statistik" hidden><div id="statsBox"></div></div>
+    <div class="mview" data-v="topfix" data-t="Darstellung oben" hidden>
+      <div class="navhint" style="text-align:left">Falls der obere Rand als Home-Bildschirm-App verschwommen ist: Variante wählen, die App lädt neu.</div>
+      <button class="mi" data-fix="1">1 · Fester Balken (Standard)</button>
+      <button class="mi" data-fix="2">2 · Ohne Randbereich</button>
+      <button class="mi" data-fix="3">3 · Mit Abstand</button>
+    </div>
   </div>
   <div id="routePick" hidden>
     <div class="rt">Route wählen</div>
@@ -794,6 +816,10 @@ $('mClose').onclick = closeMenu;
 $('mBack').onclick = () => { mStack.pop(); altLayer.clearLayers(); showView(mStack[mStack.length-1], false); };
 document.querySelectorAll('#menu .mi[data-go]').forEach(b => b.onclick = () => showView(b.dataset.go));
 $('mNavEnd').onclick = () => { endNav(); closeMenu(); };
+document.querySelectorAll('#menu .mi[data-fix]').forEach(b => {
+  b.classList.toggle('on', b.dataset.fix === document.documentElement.getAttribute('data-topfix'));
+  b.onclick = () => { try { localStorage.setItem('topfix', b.dataset.fix); } catch(_) {} save(); location.reload(); };
+});
 
 // ---- Ziel ----
 function chooseDest(dest){

@@ -45,6 +45,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 - **Bildschirm bleibt an** während der Fahrt (Wake Lock API + Video-Trick, siehe unten).
 - **Offline:** Die App startet ohne Netz. Schon angesehene Kartenkacheln kommen aus dem Cache (max. ca. 2000 Kacheln).
 - **Querformat:** Karte links, Anzeigen rechts.
+- **Darstellung oben** (Menü): Als Home-Bildschirm-App legt iOS einen Weichzeichner unter die Statusleiste, der bis in die Karte reicht (im Safari-Tab nicht). Varianten (`localStorage` `topfix`, im `<head>` vor dem Zeichnen angewendet): 1 fester deckender Streifen `#topShield` (Standard), 2 ohne `viewport-fit=cover`, 3 Streifen + 32 px Abstand.
 
 ---
 
@@ -57,7 +58,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 2. **Web-Apps auf iOS bekommen bei gesperrtem Bildschirm kein GPS.** Deshalb muss der Bildschirm an bleiben. Das Drücken der Seitentaste unterbricht die Aufzeichnung trotzdem.
 3. **GPS braucht HTTPS** (oder `localhost`). Einfaches `http://` über das Heimnetz funktioniert auf dem iPhone nicht.
 4. **Karte absichtlich OpenStreetMap statt Google Maps:** Google Maps JS API braucht einen API-Key mit Kreditkarte. Der Nutzer wollte ursprünglich Google Maps, OSM ist bewusst der kostenlose Ersatz (siehe offene Punkte).
-5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v12'` → `v13` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
+5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v13'` → `v14` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
 
 ---
 
