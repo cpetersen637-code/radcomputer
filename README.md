@@ -33,7 +33,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 - **Beenden** (früher Reset): speichert die Fahrt (ab 50 m) in IndexedDB (`radcomputer` → `rides`) und setzt zurück. Aufgezeichnet wird dafür `rec` = [lat, lon, Zeit s, Höhe, Abschnittsbeginn]. GPX-Routen liegen in `gpx`.
 - **Navigation** (Ziel über das Menü):
   - Ziel per **Adresssuche** (Nominatim/OSM, bevorzugt Treffer in der Nähe), **letzte Ziele**, **langes Drücken auf die Karte** oder **GPX-Route** (z. B. aus Komoot/Strava).
-  - **Routenauswahl:** nach der Zielwahl mehrere Varianten farbig auf der Karte + Liste (km · min · Anzahl Abbiegungen, Markierung „Kürzeste“ / „Wenigste Abbiegungen“), antippen startet. Varianten: **Valhalla** auf dem FOSSGIS-Server (`valhalla1.openstreetmap.de`, bicycle/Hybrid, `use_roads` 0,5 mit 2 Alternativen, dazu `use_roads` 0,9 = mehr Hauptstrecken, weniger Abbiegen) und **OSRM** (`routing.openstreetmap.de/routed-bike`). Fast gleiche Routen (90 % der Punkte < 25 m) werden aussortiert. Valhalla war im Test (40 Routen) ~16 % kürzer als OSRM.
+  - **Routenauswahl:** nach der Zielwahl mehrere Varianten farbig auf der Karte + Liste (km · min · Anzahl Abbiegungen, Markierung „Kürzeste“ / „Wenigste Abbiegungen“), antippen (Liste oder Linie) hebt die Route hervor und zoomt darauf, „Los“ startet. Varianten: **Valhalla** auf dem FOSSGIS-Server (`valhalla1.openstreetmap.de`, bicycle/Hybrid, `use_roads` 0,5 mit 2 Alternativen, dazu `use_roads` 0,9 = mehr Hauptstrecken, weniger Abbiegen) und **OSRM** (`routing.openstreetmap.de/routed-bike`). Fast gleiche Routen (90 % der Punkte < 25 m) werden aussortiert. Valhalla war im Test (40 Routen) ~16 % kürzer als OSRM.
   - `removeBacktracks`: Kommt eine Route nach > 80 m wieder auf < 25 m an eine frühere Stelle (oder den Startpunkt) zurück (typisch: einseitiger Radweg → erst weg, wenden, auf der anderen Seite zurück), wird das Stück durch den direkten Weg ersetzt.
   - Neuberechnung unterwegs nutzt die gewählte Variante (`nav.profile`), ohne erneute Auswahl.
   - Anzeige oben, frei auf der Karte (ohne Kachel): mittig nur die nächste Abbiegung als blauer Pfeil + Meter, oben rechts 🏁 mit Rest-km und Ankunftszeit untereinander (Ankunft nach eigenem Schnitt, sonst 18 km/h). Scharfe dunkle Kontur (paint-order/-webkit-text-stroke) statt weichem Schatten.
@@ -57,7 +57,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 2. **Web-Apps auf iOS bekommen bei gesperrtem Bildschirm kein GPS.** Deshalb muss der Bildschirm an bleiben. Das Drücken der Seitentaste unterbricht die Aufzeichnung trotzdem.
 3. **GPS braucht HTTPS** (oder `localhost`). Einfaches `http://` über das Heimnetz funktioniert auf dem iPhone nicht.
 4. **Karte absichtlich OpenStreetMap statt Google Maps:** Google Maps JS API braucht einen API-Key mit Kreditkarte. Der Nutzer wollte ursprünglich Google Maps, OSM ist bewusst der kostenlose Ersatz (siehe offene Punkte).
-5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v11'` → `v12` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
+5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v12'` → `v13` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
 
 ---
 

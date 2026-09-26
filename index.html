@@ -108,7 +108,9 @@
     border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;max-height:calc(100% - 16px);overflow-y:auto}
   #routePick .rt{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:0 2px}
   #routeList{list-style:none;display:flex;flex-direction:column;gap:6px}
-  #routeList li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:10px;background:var(--bg);cursor:pointer}
+  #routeList li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:10px;background:var(--bg);cursor:pointer;border:2px solid transparent}
+  #routeList li.sel{border-color:var(--c)}
+  .pickbtns{display:grid;grid-template-columns:1fr 2fr;gap:6px}
   #routeList .sw{width:14px;height:14px;border-radius:50%;flex:none}
   #routeList .m{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px}
   #routeList .s{font-size:12px;color:var(--muted);margin-top:1px}
@@ -163,7 +165,7 @@
   <div id="routePick" hidden>
     <div class="rt">Route wählen</div>
     <ul id="routeList"></ul>
-    <button class="sec" id="routeCancel">Abbrechen</button>
+    <div class="pickbtns"><button class="sec" id="routeCancel">Abbrechen</button><button id="routeGo">Los</button></div>
   </div>
 </div>
 <div class="dash">
@@ -658,30 +660,49 @@ async function planRoutes(dest, from){
   const fewest = routes.reduce((m, r) => r.turns < m.turns ? r : m, routes[0]);
   $('navBar').hidden = true; $('menu').hidden = true;
   altLayer.clearLayers();
+  destMarker.setLatLng([dest.lat, dest.lon]); if (!map.hasLayer(destMarker)) destMarker.addTo(map);
   const list = $('routeList'); list.textContent = '';
   routes.forEach((r, i) => {
     r.color = ALTCOL[i % ALTCOL.length];
-    const line = L.polyline(r.pts, {color:r.color, weight: i ? 5 : 7, opacity:.85}).addTo(altLayer);
-    line.on('click', () => useRoute(r, dest));
+    r.casing = L.polyline(r.pts, {color:'#0e1116', weight:11, opacity:0}).addTo(altLayer);   // dunkler Rand der gewählten Route
+    r.line = L.polyline(r.pts, {color:r.color, weight:5, opacity:.45}).addTo(altLayer);
+    r.line.on('click', () => pickRoute(i));
     const tags = [i === 0 ? 'Kürzeste' : null, r === fewest && i !== 0 ? 'Wenigste Abbiegungen' : null].filter(Boolean);
-    const li = document.createElement('li');
+    const li = document.createElement('li'); li.style.setProperty('--c', r.color);
     li.innerHTML = `<span class="sw" style="background:${r.color}"></span><div><div class="m"></div><div class="s"></div></div>`;
     li.querySelector('.m').textContent = `${fmtDist(r.len)} · ${Math.round(r.sec / 60)} min`;
     li.querySelector('.s').textContent = [...tags, `${r.turns} Abbiegungen`].join(' · ');
-    li.onclick = () => useRoute(r, dest);
+    li.onclick = () => pickRoute(i);
     list.appendChild(li);
   });
+  pick = {routes, dest, sel: 0};
   $('routePick').hidden = false;
   follow = false;
-  // Routen oberhalb der Auswahlliste einpassen
-  map.fitBounds(L.featureGroup(altLayer.getLayers()).getBounds(),
+  pickRoute(0);
+}
+// Antippen (Liste oder Linie) wählt nur aus: gewählte Route hervorheben und einpassen, die anderen blass
+let pick = null;
+function pickRoute(i){
+  pick.sel = i;
+  pick.routes.forEach((r, k) => {
+    const on = k === i;
+    r.line.setStyle({weight: on ? 7 : 4, opacity: on ? 1 : .4});
+    r.casing.setStyle({opacity: on ? .9 : 0});
+    $('routeList').children[k].classList.toggle('sel', on);
+  });
+  pick.routes[i].casing.bringToFront(); pick.routes[i].line.bringToFront();
+  map.fitBounds(pick.routes[i].line.getBounds(),
     {paddingTopLeft:[30, 30], paddingBottomRight:[30, $('routePick').offsetHeight + 24]});
 }
 function useRoute(r, dest){
-  altLayer.clearLayers(); $('routePick').hidden = true;
+  altLayer.clearLayers(); $('routePick').hidden = true; pick = null;
   setNav({mode:'route', dest, steps: r.steps, pts: r.pts, profile: r.profile}, true);
 }
-$('routeCancel').onclick = () => { altLayer.clearLayers(); $('routePick').hidden = true; $('navBar').hidden = !nav; };
+$('routeGo').onclick = () => { if (pick) useRoute(pick.routes[pick.sel], pick.dest); };
+$('routeCancel').onclick = () => {
+  altLayer.clearLayers(); $('routePick').hidden = true; pick = null; $('navBar').hidden = !nav;
+  if (!nav && map.hasLayer(destMarker)) map.removeLayer(destMarker);
+};
 
 // Position auf die Route projizieren: nächster Punkt auf der Linie + gefahrene Strecke entlang der Route
 function project(lat, lon){
