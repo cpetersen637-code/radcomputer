@@ -1,10 +1,13 @@
 // Offline-Cache: App-Dateien + zuletzt geladene Kartenkacheln
-const APP = 'radcomputer-v5';
+const APP = 'radcomputer-v7';
 const TILES = 'radcomputer-tiles-osm';  // neuer Name: alte CARTO-Kacheln ("API key required") werden gelöscht
 const CORE = [
   './', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './keepawake.mp4', './keepawake.webm',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+  'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
+  'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js',
+  'https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js'
 ];
 
 self.addEventListener('install', e => {
@@ -23,8 +26,16 @@ self.addEventListener('fetch', e => {
   // Adresssuche und Routing immer live aus dem Netz, nicht cachen
   if (url.includes('nominatim.openstreetmap.org') || url.includes('routing.openstreetmap.de')) return;
 
-  // Kartenkacheln: erst Cache, sonst Netz und merken (max. ~2000 Kacheln)
-  if (url.includes('tile.openstreetmap.org')) {
+  // OpenFreeMap: Stil/TileJSON (ändern sich, verweisen auf aktuelle Kartenversion) Netz zuerst, offline aus dem Cache
+  if (url.includes('tiles.openfreemap.org') && !/\.(pbf|pbf\?.*|png|json\?.*)$|\/fonts\/|\/sprites\//.test(url)) {
+    e.respondWith(caches.open(TILES).then(c => fetch(e.request)
+      .then(res => { if (res.ok) c.put(e.request, res.clone()); return res; })
+      .catch(() => c.match(e.request).then(r => r || new Response('', {status: 504})))));
+    return;
+  }
+
+  // Kartenkacheln, Schriften, Sprites: erst Cache, sonst Netz und merken (max. ~2000 Einträge)
+  if (url.includes('tiles.openfreemap.org') || url.includes('tile.openstreetmap.org')) {
     e.respondWith(caches.open(TILES).then(async c => {
       const hit = await c.match(e.request);
       if (hit) return hit;

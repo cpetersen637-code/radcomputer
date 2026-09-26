@@ -12,6 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <title>Radcomputer</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -24,9 +25,9 @@
   [hidden]{display:none!important}
   #mapWrap{flex:1;min-height:30vh;position:relative;border-bottom:1px solid var(--line)}
   #map{position:absolute;inset:0}
-  .leaflet-container{background:#1b2027}
-  /* OSM-Standardkarte per Filter abdunkeln (Strecke/Marker liegen in anderen Ebenen und bleiben farbig) */
-  .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)}
+  .leaflet-container{background:#161b22}
+  /* Nur Rückfallebene ohne WebGL: OSM-Rasterkarte grau abdunkeln */
+  .rasterdark .leaflet-tile-pane{filter:grayscale(1) invert(1) brightness(1.05) contrast(.85)}
   button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   .dash{padding:10px max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:8px}
   .speed{display:flex;align-items:baseline;justify-content:center;gap:8px}
@@ -46,13 +47,23 @@
   .dot.on{background:var(--accent)}
   /* Navigation */
   .navbtn{position:absolute;left:10px;bottom:10px;z-index:1000;width:auto;padding:10px 16px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
-  #navBar{position:absolute;top:8px;left:8px;right:8px;z-index:1000;display:flex;align-items:center;gap:10px;
-    background:rgba(22,27,34,.95);border:1px solid var(--line);border-radius:12px;padding:8px 12px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
-  #navArrow{font-size:34px;line-height:1;min-width:36px;text-align:center;color:#4ea1ff}
-  #navBar .nb{flex:1;min-width:0}
-  #navMain{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
-  #navDist{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;margin-right:6px}
-  #navInfo{font-size:12px;color:var(--muted);margin-top:2px}
+  /* Navi-Leiste: Reihe der nächsten Richtungen, je Pfeil + Meter; die nächste groß hervorgehoben */
+  #navBar{position:absolute;top:8px;left:8px;right:8px;z-index:1000;display:flex;flex-direction:column;gap:5px;
+    background:rgba(22,27,34,.95);border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  #navSteps{display:flex;flex-wrap:wrap;align-items:center;gap:6px;height:44px;overflow:hidden}  /* was nicht passt, rutscht in die unsichtbare 2. Zeile */
+  .st{display:flex;align-items:center;gap:6px;flex:none;padding:5px 9px;border-radius:9px;background:var(--bg);white-space:nowrap}
+  .st .a{font-size:20px;line-height:1;color:#4ea1ff}
+  .st .d{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px}
+  .st .t{font-size:14px}
+  .st.now{background:#4ea1ff;padding:6px 12px}
+  .st.now .a,.st.now .d,.st.now .t{color:var(--bg)}
+  .st.now .a{font-size:30px}
+  .st.now .d{font-size:20px}
+  #navInfo{font-size:12px;color:var(--muted);padding:0 4px}
+  #navInfo:empty{display:none}
+  /* Quellenangabe der Karte klein und dunkel */
+  .leaflet-container .leaflet-control-attribution{background:rgba(14,17,22,.6);color:#6b7480;font-size:9px;padding:0 4px}
+  .leaflet-control-attribution a{color:#8b949e}
   #navPanel{position:absolute;left:8px;right:8px;bottom:8px;z-index:1001;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(100% - 16px);overflow-y:auto;box-shadow:0 2px 12px rgba(0,0,0,.6)}
   #navPanel form{display:flex;gap:6px}
@@ -78,8 +89,8 @@
 <div id="mapWrap">
   <div id="map"></div>
   <div id="navBar" hidden>
-    <div id="navArrow">↑</div>
-    <div class="nb"><div id="navMain"><span id="navDist"></span><span id="navText"></span></div><div id="navInfo"></div></div>
+    <div id="navSteps"></div>
+    <div id="navInfo"></div>
   </div>
   <button class="sec navbtn" id="navBtn">Ziel</button>
   <div id="navPanel" hidden>
@@ -112,12 +123,50 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
 <script>
-// ---- Karte (OpenStreetMap, kostenlos, kein API-Key; CARTO verlangt inzwischen einen Key) ----
-const map = L.map('map', {zoomControl:false, attributionControl:true}).setView([51.16, 10.45], 6);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende'
-}).addTo(map);
+// ---- Karte: Vektorkarte von OpenFreeMap (OSM-Daten, kostenlos, kein API-Key) mit eigenem dunklen Stil ----
+const map = L.map('map', {zoomControl:false, attributionControl:true, maxZoom:19}).setView([51.16, 10.45], 6);
+map.attributionControl.setPrefix(false);
+// Farben der Karte – hier anpassen
+const MAPCOL = {bg:'#161b22', water:'#1c3b52', park:'#18302a', build:'#1f262f', minor:'#343d49', major:'#4b5767',
+  motor:'#6b5a3a', rail:'#2c333c', border:'#3a3f47', cycle:'#2f6b58', text:'#aab4c0', waterText:'#6f9bb8', halo:'#0e1116'};
+// Basis ist der Stil "liberty" (enthält alle Ebenen); POI-Symbole und Hausnummern raus, alle Farben ersetzen
+function darkStyle(st){
+  const C = MAPCOL;
+  st.layers = st.layers.filter(l => !/poi|aeroway|housenumber|ferry/.test(l.id));
+  for (const l of st.layers) {
+    const p = l.paint = l.paint || {}, id = l.id;
+    if (l.type === 'background') p['background-color'] = C.bg;
+    else if (l.type === 'fill' || l.type === 'fill-extrusion') {
+      const k = l.type + '-color'; delete p[l.type + '-pattern']; delete p['fill-outline-color'];
+      p[k] = /water/.test(id) ? C.water : /park|wood|grass|landcover|landuse_(park|cemetery)/.test(id) ? C.park
+        : /building/.test(id) ? C.build : C.bg;
+      if (l.type === 'fill-extrusion') { p['fill-extrusion-height'] = 0; p['fill-extrusion-base'] = 0; }
+    } else if (l.type === 'line') {
+      delete p['line-pattern'];
+      p['line-color'] = /water|river/.test(id) ? C.water : /rail|transit/.test(id) ? C.rail : /boundary/.test(id) ? C.border
+        : /casing/.test(id) ? C.bg : /motorway|trunk/.test(id) ? C.motor : /primary|secondary|tertiary/.test(id) ? C.major
+        : /cycle|path|track/.test(id) ? C.cycle : C.minor;
+    } else if (l.type === 'symbol') {
+      if (l.layout) delete l.layout['icon-image'];
+      p['text-color'] = /water/.test(id) ? C.waterText : C.text; p['text-halo-color'] = C.halo; p['text-halo-width'] = 1.5;
+    }
+  }
+  return st;
+}
+function rasterFallback(){  // ohne WebGL oder wenn der Stil nicht lädt: OSM-Rasterkarte, grau abgedunkelt
+  document.body.classList.add('rasterdark');
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap-Mitwirkende'}).addTo(map);
+}
+const webgl = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch(_) { return false; } })();
+if (window.maplibregl && L.maplibreGL && webgl) {
+  fetch('https://tiles.openfreemap.org/styles/liberty').then(r => r.json())
+    .then(st => L.maplibreGL({style: darkStyle(st),
+      attribution:'&copy; <a href="https://openfreemap.org">OpenFreeMap</a> &copy; OpenMapTiles &copy; OpenStreetMap-Mitwirkende'}).addTo(map))
+    .catch(rasterFallback);
+} else rasterFallback();
 // Geplante Route (Navigation) – vor der gefahrenen Strecke angelegt, damit sie darunter liegt
 const routeLine = L.polyline([], {color:'#4ea1ff', weight:7, opacity:.7}).addTo(map);
 const destMarker = L.circleMarker([0,0], {radius:7, color:'#fff', weight:2, fillColor:'#4ea1ff', fillOpacity:1});
@@ -321,12 +370,22 @@ function stepText(s){
   return {a:ARROW[mod] || '↑', t:cap(DIR[mod] || 'weiter') + on};
 }
 
-function navShow(arrow, dist, text, info){
+// Navi-Leiste füllen: chips = [{a:Pfeil, d:Entfernungstext, t:Text (optional)}], der erste wird groß dargestellt
+function navChips(chips, info){
   clearTimeout(arriveTimer);
   $('navBar').hidden = false;
-  $('navArrow').textContent = arrow; $('navDist').textContent = dist;
-  $('navText').textContent = text; $('navInfo').textContent = info || '';
+  const box = $('navSteps'); box.textContent = '';
+  chips.forEach((c, i) => {
+    const el = document.createElement('div'); el.className = i ? 'st' : 'st now';
+    for (const [k, v] of [['a', c.a], ['d', c.d], ['t', c.t]]) if (v) {
+      const s = document.createElement('span'); s.className = k; s.textContent = v; el.appendChild(s);
+    }
+    box.appendChild(el);
+  });
+  $('navInfo').textContent = info || '';
 }
+// Statusmeldung (Route wird berechnet, Ziel erreicht …) als einzelnes Feld
+const navShow = (arrow, dist, text, info) => navChips([{a:arrow, d:dist, t:text}], info);
 
 function setNav(n, fit){
   n.cum = [0];
@@ -408,9 +467,10 @@ function updateNav(pt, acc){
     navShow('⚠', fmtDist(p.dist), 'neben der Route', info);
     return;
   }
-  const next = nav.steps.find(s => s.d > nav.along + 3);
-  if (next) navShow(next.a, fmtDist(next.d - nav.along), next.t, info);
-  else navShow('↑', fmtDist(rest), 'der Route folgen', info);
+  // Die nächsten Richtungen mit Entfernung ab jetzt (so viele, wie in die Leiste passen); am Ende immer das Ziel
+  const next = nav.steps.filter(s => s.d > nav.along + 3).slice(0, 5).map(s => ({a:s.a, d:fmtDist(s.d - nav.along)}));
+  if (!next.length || next[next.length-1].a !== '🏁' && next.length < 5) next.push({a:'🏁', d:fmtDist(rest)});
+  navChips(next, info);
 }
 
 function chooseDest(dest){

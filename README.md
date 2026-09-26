@@ -23,7 +23,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 
 ## Funktionen (Stand jetzt)
 
-- **Karte:** Leaflet 1.9.4 (via unpkg-CDN) mit den Standard-Kacheln von OpenStreetMap, per CSS-Filter abgedunkelt (CARTO verlangt seit 2026 einen API-Key, deren Kacheln zeigten nur noch „API key required“). Folgt der Position. Wer die Karte verschiebt, schaltet das Folgen ab, „Zentrieren“ schaltet es wieder ein.
+- **Karte:** Leaflet 1.9.4 + MapLibre GL 4.7.1 (via unpkg-CDN, Plugin `maplibre-gl-leaflet`). Vektorkarte von **OpenFreeMap** (OSM-Daten, kostenlos, ohne Key), Basis-Stil „liberty“, per `darkStyle()` komplett umgefärbt (Farben in `MAPCOL` oben im Script). Ohne WebGL oder wenn der Stil nicht lädt: OSM-Rasterkarte grau abgedunkelt. (CARTO verlangt seit 2026 einen API-Key.) Folgt der Position. Wer die Karte verschiebt, schaltet das Folgen ab, „Zentrieren“ schaltet es wieder ein.
 - **Tacho:** Nimmt `coords.speed` vom GPS, sonst Strecke ÷ Zeit. Unter 1,5 km/h wird 0 angezeigt.
 - **Distanz:** Haversine zwischen GPS-Punkten. Rauschfilter: Punkt zählt nur bei Genauigkeit < 30 m, Abstand > 2 m und < 120 km/h. Nach Start/Weiter beginnt ein neuer Streckenabschnitt, die Strecke während der Pause zählt nicht.
 - **Fahrzeit:** Zählt nur, wenn Tempo > 0 und der letzte GPS-Punkt jünger als 5 s ist (bei Signalverlust steht die Zeit, Anzeige „Kein GPS-Signal“).
@@ -32,7 +32,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 - **Navigation** (Knopf „Ziel“ unten links auf der Karte):
   - Ziel per **Adresssuche** (Nominatim/OSM, bevorzugt Treffer in der Nähe), per **langem Drücken auf die Karte** oder als **GPX-Route** (z. B. aus Komoot/Strava).
   - Fahrradroute vom **FOSSGIS-Routingserver** (`routing.openstreetmap.de/routed-bike`, OSRM, kostenlos, ohne Key).
-  - Leiste oben: Pfeil + Entfernung zum nächsten Abbiegen + Hinweis auf Deutsch (z. B. „Rechts abbiegen · Christianstraße“), darunter Restdistanz und Ankunftszeit (eigener Schnitt, sonst 18 km/h).
+  - Leiste oben: Reihe der nächsten Richtungen (Pfeil + Meter bis dorthin), die nächste groß und blau, am Ende die Zielflagge; darunter klein Restdistanz und Ankunftszeit (eigener Schnitt, sonst 18 km/h).
   - Mehr als 40 m neben der Route (3 GPS-Punkte hintereinander) → Route wird neu berechnet (höchstens alle 10 s). Bei GPX-Routen nur Warnung „neben der Route“ mit Abstand, ohne Abbiegehinweise.
   - Ziel erreicht bei < 25 m Rest. Navigation wird in `localStorage` (Schlüssel `nav`) gesichert und beim Öffnen wiederhergestellt.
   - Funktioniert unabhängig von Start/Pause (Navi geht auch ohne Aufzeichnung).
@@ -53,7 +53,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 2. **Web-Apps auf iOS bekommen bei gesperrtem Bildschirm kein GPS.** Deshalb muss der Bildschirm an bleiben. Das Drücken der Seitentaste unterbricht die Aufzeichnung trotzdem.
 3. **GPS braucht HTTPS** (oder `localhost`). Einfaches `http://` über das Heimnetz funktioniert auf dem iPhone nicht.
 4. **Karte absichtlich OpenStreetMap statt Google Maps:** Google Maps JS API braucht einen API-Key mit Kreditkarte. Der Nutzer wollte ursprünglich Google Maps, OSM ist bewusst der kostenlose Ersatz (siehe offene Punkte).
-5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v5'` → `v6` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
+5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v7'` → `v8` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
 
 ---
 
@@ -129,7 +129,7 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 - Bildschirm an kostet Akku, bei langen Touren Powerbank.
 - Höhe ist rohe GPS-Höhe (±10 m typisch).
 - `localStorage` wird gelöscht, wenn Website-Daten in Safari gelöscht werden. iOS kann Daten von Web-Apps, die mehrere Wochen nicht geöffnet wurden, ebenfalls löschen.
-- Kartenkacheln von openstreetmap.org: kostenlos für geringe Nutzung, es gilt die Tile Usage Policy (osm.wiki/Tile_usage_policy). Für eine private App unproblematisch.
+- Kartendaten von OpenFreeMap (kostenlos, ohne Limit für normale Nutzung). Offline: Vektorkacheln, Schriften und Sprites werden gecacht, Stil/TileJSON Netz zuerst.
 
 ---
 
