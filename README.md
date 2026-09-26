@@ -29,8 +29,10 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 - **Fahrzeit:** Zählt nur, wenn Tempo > 0 und der letzte GPS-Punkt jünger als 5 s ist (bei Signalverlust steht die Zeit, Anzeige „Kein GPS-Signal“).
 - **Schnitt:** Distanz ÷ Bewegungszeit. **Max:** höchstes geglättetes Tempo bei guter Genauigkeit.
 - **Höhenmeter:** Summe der Anstiege (↑). GPS-Höhe wird geglättet (gleitender Mittelwert), gezählt wird erst ab 5 m Änderung (Glättungsfaktor 0,15, per Simulation abgestimmt), Punkte mit Höhengenauigkeit > 25 m werden ignoriert. Abstieg wird intern mitgezählt (`descM`), aber nicht angezeigt.
-- **Navigation** (Knopf „Ziel“ unten links auf der Karte):
-  - Ziel per **Adresssuche** (Nominatim/OSM, bevorzugt Treffer in der Nähe), per **langem Drücken auf die Karte** oder als **GPX-Route** (z. B. aus Komoot/Strava).
+- **Menü** (☰ unten links auf der Karte): Ziel suchen (mit „Letzte Ziele“, max. 8, `localStorage` `recent`), Routen (GPX laden/gespeicherte Routen), Gefahrene Fahrten (Liste → Strecke auf der Karte, Werte, **GPX teilen** über das iOS-Teilen-Menü bzw. Download, Nachfahren, Löschen), Statistik (Woche/Monat/Jahr/Gesamt: Fahrten, km, Zeit, Höhenmeter + Rekorde), „Navigation beenden“ bei aktiver Navi.
+- **Beenden** (früher Reset): speichert die Fahrt (ab 50 m) in IndexedDB (`radcomputer` → `rides`) und setzt zurück. Aufgezeichnet wird dafür `rec` = [lat, lon, Zeit s, Höhe, Abschnittsbeginn]. GPX-Routen liegen in `gpx`.
+- **Navigation** (Ziel über das Menü):
+  - Ziel per **Adresssuche** (Nominatim/OSM, bevorzugt Treffer in der Nähe), **letzte Ziele**, **langes Drücken auf die Karte** oder **GPX-Route** (z. B. aus Komoot/Strava).
   - **Routenauswahl:** nach der Zielwahl mehrere Varianten farbig auf der Karte + Liste (km · min · Anzahl Abbiegungen, Markierung „Kürzeste“ / „Wenigste Abbiegungen“), antippen startet. Varianten: **Valhalla** auf dem FOSSGIS-Server (`valhalla1.openstreetmap.de`, bicycle/Hybrid, `use_roads` 0,5 mit 2 Alternativen, dazu `use_roads` 0,9 = mehr Hauptstrecken, weniger Abbiegen) und **OSRM** (`routing.openstreetmap.de/routed-bike`). Fast gleiche Routen (90 % der Punkte < 25 m) werden aussortiert. Valhalla war im Test (40 Routen) ~16 % kürzer als OSRM.
   - `removeBacktracks`: Kommt eine Route nach > 80 m wieder auf < 25 m an eine frühere Stelle (oder den Startpunkt) zurück (typisch: einseitiger Radweg → erst weg, wenden, auf der anderen Seite zurück), wird das Stück durch den direkten Weg ersetzt.
   - Neuberechnung unterwegs nutzt die gewählte Variante (`nav.profile`), ohne erneute Auswahl.
@@ -38,7 +40,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
   - Mehr als 40 m neben der Route (3 GPS-Punkte hintereinander) → Route wird neu berechnet (höchstens alle 10 s). Bei GPX-Routen nur Warnung „neben der Route“ mit Abstand, ohne Abbiegehinweise.
   - Ziel erreicht bei < 25 m Rest. Navigation wird in `localStorage` (Schlüssel `nav`) gesichert und beim Öffnen wiederhergestellt.
   - Funktioniert unabhängig von Start/Pause (Navi geht auch ohne Aufzeichnung).
-- **Start / Pause / Weiter / Reset** (Reset mit Sicherheitsabfrage).
+- **Start / Pause / Weiter / Beenden** (Beenden mit Sicherheitsabfrage).
 - **Fahrt wird gesichert** in `localStorage` (Schlüssel `ride`): bei jedem GPS-Punkt, alle 5 s während der Fahrt und bei Start/Pause/Reset. Beim Öffnen wird sie wiederhergestellt, der Knopf zeigt dann „Weiter“.
 - **Bildschirm bleibt an** während der Fahrt (Wake Lock API + Video-Trick, siehe unten).
 - **Offline:** Die App startet ohne Netz. Schon angesehene Kartenkacheln kommen aus dem Cache (max. ca. 2000 Kacheln).
@@ -55,7 +57,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 2. **Web-Apps auf iOS bekommen bei gesperrtem Bildschirm kein GPS.** Deshalb muss der Bildschirm an bleiben. Das Drücken der Seitentaste unterbricht die Aufzeichnung trotzdem.
 3. **GPS braucht HTTPS** (oder `localhost`). Einfaches `http://` über das Heimnetz funktioniert auf dem iPhone nicht.
 4. **Karte absichtlich OpenStreetMap statt Google Maps:** Google Maps JS API braucht einen API-Key mit Kreditkarte. Der Nutzer wollte ursprünglich Google Maps, OSM ist bewusst der kostenlose Ersatz (siehe offene Punkte).
-5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v10'` → `v11` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
+5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v11'` → `v12` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
 
 ---
 
@@ -114,7 +116,7 @@ Lokal testen am PC: `http://localhost:8000` (GPS im Desktop-Browser ist ungenau/
 Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 
 1. **Fahrzeit bei Lücken korrigieren.** Wenn der Bildschirm kurz gesperrt war und die App weiterläuft, wird die Lücke als gerade Linie verbunden (Distanz ≈ ok), aber die Fahrzeit der Lücke fehlt → Schnitt zu hoch. Idee: Beim nächsten GPS-Punkt nach einer Lücke (> 5 s seit letztem Punkt) die Zeit dazurechnen, wenn Luftlinie ÷ Zeit ein plausibles Tempo ergibt (z. B. 3–60 km/h). Außerdem die Fahrzeit auf GPS-Zeitstempeln statt auf `setInterval` aufbauen (Timer laufen im Hintergrund nicht).
-2. **Fahrtenverlauf + GPX-Export.** „Fahrt beenden“ speichert die Fahrt in eine Liste (IndexedDB oder localStorage), Export als `.gpx` (Teilen-Menü auf iOS via `navigator.share` mit Datei oder Download-Link) für Strava/Komoot. Dafür Punkte mit Zeitstempel und Höhe speichern (aktuell nur lat/lon).
+2. ~~**Fahrtenverlauf + GPX-Export.**~~ (erledigt: Menü → Gefahrene Fahrten) „Fahrt beenden“ speichert die Fahrt in eine Liste (IndexedDB oder localStorage), Export als `.gpx` (Teilen-Menü auf iOS via `navigator.share` mit Datei oder Download-Link) für Strava/Komoot. Dafür Punkte mit Zeitstempel und Höhe speichern (aktuell nur lat/lon).
 3. ~~Höhenmeter bergauf~~ (erledigt)
 4. **Beim Wiederherstellen** optional direkt fragen „Fahrt fortsetzen?“ statt nur den Knopf auf „Weiter“ zu setzen.
 5. **Google Maps (optional).** Nur falls gewünscht: Google Maps JS API mit eigenem Key (Google Cloud, Kreditkarte, Key auf die eigene Domain beschränken). Alternativ in Leaflet eine hellere Kartenvariante oder Satellit (z. B. Esri World Imagery) als umschaltbare Ebene anbieten, ist kostenlos.

@@ -47,7 +47,8 @@
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:middle}
   .dot.on{background:var(--accent)}
   /* Navigation */
-  .navbtn{position:absolute;left:10px;bottom:10px;z-index:1000;width:auto;padding:10px 16px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  .navbtn{position:absolute;left:10px;bottom:10px;z-index:1000;width:48px;height:44px;padding:0;display:flex;align-items:center;justify-content:center}
+  .navbtn svg{width:22px;height:22px}
   /* Navi-Anzeige frei auf der Karte (ohne Kachel): Mitte = nächste Abbiegung, rechts = Ziel/Rest/Ankunft.
      Scharfe dunkle Kontur statt weichem Schatten, damit es auf der Karte lesbar bleibt, aber nicht verschwimmt. */
   #navBar{position:absolute;top:6px;left:0;right:0;z-index:1000;pointer-events:none;
@@ -69,18 +70,40 @@
   /* Quellenangabe der Karte klein und dunkel */
   .leaflet-container .leaflet-control-attribution{background:rgba(14,17,22,.6);color:#6b7480;font-size:9px;padding:0 4px}
   .leaflet-control-attribution a{color:#8b949e}
-  #navPanel{position:absolute;left:8px;right:8px;bottom:8px;z-index:1001;background:var(--panel);border:1px solid var(--line);
-    border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(100% - 16px);overflow-y:auto;box-shadow:0 2px 12px rgba(0,0,0,.6)}
-  #navPanel form{display:flex;gap:6px}
-  #navPanel input[type=search]{flex:1;min-width:0;font:16px Inter,sans-serif;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
-  #navPanel form button{padding:10px 14px}
-  #navResults{list-style:none;display:flex;flex-direction:column;gap:4px}
-  #navResults li{padding:9px 10px;border-radius:8px;background:var(--bg);font-size:14px;cursor:pointer}
-  #navResults li.muted{background:none;color:var(--muted);cursor:default}
-  #navResults li small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
-  .navrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
-  .navrow button,.navrow label{padding:10px 6px;font-size:14px}
-  label.sec{font:600 14px Inter,sans-serif;border-radius:10px;text-align:center;cursor:pointer;background:var(--bg);color:var(--text);border:1px solid var(--line)}
+  /* Menü (☰): Hauptliste + Unteransichten */
+  #menu{position:absolute;left:8px;right:8px;bottom:8px;z-index:1001;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(100% - 16px);overflow-y:auto}
+  .mhead{display:flex;align-items:center;gap:8px;min-height:32px}
+  .mhead #mTitle{flex:1;font-weight:600;font-size:16px}
+  .mhead button{width:auto;padding:6px 12px;font-size:15px;background:var(--bg);color:var(--text);border:1px solid var(--line)}
+  .mview{display:flex;flex-direction:column;gap:6px}
+  .mi{display:flex;justify-content:space-between;align-items:center;text-align:left;background:var(--bg);color:var(--text);
+    border:1px solid var(--line);padding:12px;font-size:15px}
+  .mi::after{content:'›';color:var(--muted);font-size:20px;line-height:1}
+  .mi.warn{color:var(--warn)} .mi.warn::after{content:''}
+  #menu form{display:flex;gap:6px}
+  #menu input[type=search]{flex:1;min-width:0;font:16px Inter,sans-serif;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+  #menu form button{width:auto;padding:10px 14px}
+  .mlist{list-style:none;display:flex;flex-direction:column;gap:4px}
+  .mlist li{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;background:var(--bg);font-size:14px;cursor:pointer}
+  .mlist li .grow{flex:1;min-width:0}
+  .mlist li.muted{background:none;color:var(--muted);cursor:default}
+  .mlist li small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  .mlist li .del{width:auto;padding:4px 10px;background:none;color:var(--muted);border:1px solid var(--line);font-size:13px}
+  .msec{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:4px;padding:0 2px}
+  .mrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .mrow button,.mrow label{padding:10px 6px;font-size:14px}
+  label.sec{font:600 14px Inter,sans-serif;border-radius:10px;text-align:center;cursor:pointer;background:var(--bg);color:var(--text);border:1px solid var(--line);padding:12px}
+  button.danger{background:var(--bg);color:#ff7b72;border:1px solid var(--line)}
+  .kv{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .kv div{background:var(--bg);border-radius:8px;padding:7px;text-align:center}
+  .kv b{display:block;font-family:'JetBrains Mono',monospace;font-size:16px}
+  .kv span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  table.st{width:100%;border-collapse:collapse;font-size:13px}
+  table.st th{font-weight:400;color:var(--muted);font-size:11px;text-align:right;padding:4px}
+  table.st th:first-child,table.st td:first-child{text-align:left}
+  table.st td{text-align:right;padding:7px 4px;border-top:1px solid var(--line);font-family:'JetBrains Mono',monospace}
+  table.st td:first-child{font-family:Inter,sans-serif}
   #routePick{position:absolute;left:8px;right:8px;bottom:8px;z-index:1001;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;max-height:calc(100% - 16px);overflow-y:auto}
   #routePick .rt{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:0 2px}
@@ -109,16 +132,33 @@
     </div>
     <div id="navEta" hidden><div class="f">🏁</div><div id="navRest"></div><div id="navTime"></div></div>
   </div>
-  <button class="sec navbtn" id="navBtn">Ziel</button>
-  <div id="navPanel" hidden>
-    <form id="navForm"><input type="search" id="navQuery" placeholder="Adresse oder Ort suchen" enterkeyhint="search" autocomplete="off"><button type="submit">Suchen</button></form>
-    <ul id="navResults"></ul>
-    <div class="navrow">
-      <label class="sec">GPX laden<input type="file" id="gpxFile" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden></label>
-      <button class="sec" id="navEnd">Navi beenden</button>
-      <button class="sec" id="navClose">Schließen</button>
+  <button class="sec navbtn" id="menuBtn" aria-label="Menü"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+  <div id="menu" hidden>
+    <div class="mhead"><button id="mBack" hidden>‹</button><span id="mTitle">Menü</span><button id="mClose">✕</button></div>
+    <div class="mview" data-v="main" data-t="Menü">
+      <button class="mi" data-go="dest">Ziel suchen</button>
+      <button class="mi" data-go="gpx">Routen (GPX)</button>
+      <button class="mi" data-go="rides">Gefahrene Fahrten</button>
+      <button class="mi" data-go="stats">Statistik</button>
+      <button class="mi warn" id="mNavEnd">Navigation beenden</button>
     </div>
-    <div class="navhint">Tipp: Lange auf die Karte drücken, um dort ein Ziel zu setzen.</div>
+    <div class="mview" data-v="dest" data-t="Ziel suchen" hidden>
+      <form id="navForm"><input type="search" id="navQuery" placeholder="Adresse oder Ort" enterkeyhint="search" autocomplete="off"><button type="submit">Suchen</button></form>
+      <ul id="navResults" class="mlist"></ul>
+      <div class="msec" id="recentHead">Letzte Ziele</div>
+      <ul id="recentList" class="mlist"></ul>
+      <div class="navhint">Tipp: Lange auf die Karte drücken, um dort ein Ziel zu setzen.</div>
+    </div>
+    <div class="mview" data-v="gpx" data-t="Routen (GPX)" hidden>
+      <label class="sec">GPX-Datei laden<input type="file" id="gpxFile" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden></label>
+      <ul id="gpxList" class="mlist"></ul>
+    </div>
+    <div class="mview" data-v="rides" data-t="Gefahrene Fahrten" hidden><ul id="rideList" class="mlist"></ul></div>
+    <div class="mview" data-v="ride" data-t="Fahrt" hidden>
+      <div class="kv" id="rideInfo"></div>
+      <div class="mrow"><button class="sec" id="rideFollow">Nachfahren</button><button class="sec" id="rideShare">GPX teilen</button><button class="danger" id="rideDel">Löschen</button></div>
+    </div>
+    <div class="mview" data-v="stats" data-t="Statistik" hidden><div id="statsBox"></div></div>
   </div>
   <div id="routePick" hidden>
     <div class="rt">Route wählen</div>
@@ -133,13 +173,13 @@
     <div class="cell"><div class="l">Zeit</div><div class="v" id="time">0:00:00</div></div>
     <div class="cell"><div class="l">Schnitt</div><div class="v" id="avg">0.0 <small>km/h</small></div></div>
     <div class="cell"><div class="l">Max</div><div class="v" id="max">0.0 <small>km/h</small></div></div>
-    <div class="cell"><div class="l">Höhenmeter</div><div class="v" id="alt">↑0 <small>m</small></div></div>
+    <div class="cell"><div class="l">Höhenmeter</div><div class="v" id="alt">0 <small>m</small></div></div>
     <div class="cell"><div class="l">Uhrzeit</div><div class="v" id="clock">--:--</div></div>
   </div>
   <div class="btns">
     <button id="startBtn">Start</button>
     <button class="sec" id="centerBtn">Zentrieren</button>
-    <button class="sec" id="resetBtn">Reset</button>
+    <button class="sec" id="resetBtn">Beenden</button>
   </div>
   <div class="status"><span class="dot" id="dot"></span><span id="status">Bereit</span></div>
 </div>
@@ -200,7 +240,10 @@ function addPoint(pt, newSeg){
   let seg = segs[segs.length-1];
   if (newSeg && seg.length) { seg = []; segs.push(seg); }
   track.addLatLng([pt.lat, pt.lon], seg);
+  rec.push([+pt.lat.toFixed(6), +pt.lon.toFixed(6), Math.round(pt.t / 1000), pt.ele == null ? null : Math.round(pt.ele), newSeg ? 1 : 0]);
 }
+// Aufzeichnung für Fahrtenliste/GPX: [lat, lon, Zeit (s), Höhe (m) | null, 1 = neuer Abschnitt]
+let rec = [];
 const trackPoints = () => track.getLatLngs().reduce((n, s) => n + s.length, 0);
 
 // ---- Zustand ----
@@ -231,7 +274,7 @@ function render(kmh){
   const avg = movingMs > 0 ? (distM/1000) / (movingMs/3600000) : 0;
   $('avg').innerHTML = avg.toFixed(1) + ' <small>km/h</small>';
   $('time').textContent = fmtTime(movingMs);
-  $('alt').innerHTML = '↑' + Math.round(climbM) + ' <small>m</small>';
+  $('alt').innerHTML = Math.round(climbM) + ' <small>m</small>';
 }
 
 // Tempo-Rohwert: GPS-Tempo (Doppler, zuverlässig) bevorzugen; Strecke/Zeit nur zwischen zwei genauen Punkten
@@ -265,7 +308,7 @@ function updateAlt(c){
 
 function onPos(p){
   const c = p.coords, now = p.timestamp;
-  const pt = {lat:c.latitude, lon:c.longitude, t:now, acc:c.accuracy};
+  const pt = {lat:c.latitude, lon:c.longitude, t:now, acc:c.accuracy, ele:c.altitude};
   lastFixAt = Date.now();
   $('dot').classList.add('on');
   $('status').textContent = `GPS ±${Math.round(c.accuracy)} m`;
@@ -298,7 +341,7 @@ function onPos(p){
 function save(){
   try {
     localStorage.setItem('ride', JSON.stringify({
-      distM, maxKmh, movingMs, running, climbM, descM,
+      distM, maxKmh, movingMs, running, climbM, descM, rec,
       track: track.getLatLngs().map(s => s.map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6)]))
     }));
   } catch(_) {}
@@ -308,7 +351,7 @@ function restore(){
     const r = JSON.parse(localStorage.getItem('ride') || 'null');
     if (!r) return;
     distM = r.distM || 0; maxKmh = r.maxKmh || 0; movingMs = r.movingMs || 0;
-    climbM = r.climbM || 0; descM = r.descM || 0;
+    climbM = r.climbM || 0; descM = r.descM || 0; rec = r.rec || [];
     let segs = r.track || [];
     if (segs.length && typeof segs[0][0] === 'number') segs = [segs];  // altes Format: eine flache Liste
     track.setLatLngs(segs.length ? segs : [[]]);
@@ -381,8 +424,15 @@ $('startBtn').onclick = () => {
   save();
 };
 $('centerBtn').onclick = () => { follow = true; if (last) map.setView([last.lat, last.lon], 16); };
-$('resetBtn').onclick = () => {
-  if (!confirm('Fahrt zurücksetzen?')) return;
+$('resetBtn').onclick = async () => {
+  const worth = distM >= 50 && rec.length > 1;
+  if (!confirm(worth ? 'Fahrt beenden und speichern?' : 'Fahrt beenden? (zu kurz zum Speichern)')) return;
+  if (worth) {
+    try { await DB.put('rides', {id: Date.now(), start: rec[0][2] * 1000, end: rec[rec.length-1][2] * 1000,
+      dist: distM, moving: movingMs, max: maxKmh, climb: climbM, desc: descM, rec}); }
+    catch(e) { alert('Speichern fehlgeschlagen: ' + e.message); return; }
+  }
+  rec = [];
   distM = 0; maxKmh = 0; movingMs = 0; track.setLatLngs([[]]); newSeg = true;
   climbM = 0; descM = 0; altRef = null; lastGood = null; spdHist = [];
   running = false; keepAwake(false);
@@ -606,7 +656,7 @@ async function planRoutes(dest, from){
   routes = uniq.slice(0, 4);
   if (routes.length === 1) { useRoute(routes[0], dest); return; }
   const fewest = routes.reduce((m, r) => r.turns < m.turns ? r : m, routes[0]);
-  $('navBar').hidden = true;
+  $('navBar').hidden = true; $('menu').hidden = true;
   altLayer.clearLayers();
   const list = $('routeList'); list.textContent = '';
   routes.forEach((r, i) => {
@@ -683,12 +733,72 @@ function updateNav(pt, acc){
   else navShow('🏁', fmtDist(rest), '', '', info);
 }
 
+// ---- Speicher für Fahrten und GPX-Routen (IndexedDB, da localStorage für viele Strecken zu klein ist) ----
+const DB = (() => {
+  let conn;
+  const open = () => conn || (conn = new Promise((res, rej) => {
+    const r = indexedDB.open('radcomputer', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('rides', {keyPath:'id'}); r.result.createObjectStore('gpx', {keyPath:'id'}); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const run = async (store, mode, fn) => { const db = await open(); return new Promise((res, rej) => {
+    const t = db.transaction(store, mode), q = fn(t.objectStore(store));
+    t.oncomplete = () => res(q.result); t.onerror = () => rej(t.error); }); };
+  return { all: st => run(st, 'readonly', o => o.getAll()), put: (st, v) => run(st, 'readwrite', o => o.put(v)),
+           del: (st, id) => run(st, 'readwrite', o => o.delete(id)) };
+})();
+
+const fmtDate = ms => new Date(ms).toLocaleDateString('de-DE', {weekday:'short', day:'2-digit', month:'2-digit', year:'2-digit'});
+const fmtHM = ms => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')} h` : `${m} min`; };
+const km = m => (m / 1000).toFixed(1).replace('.', ',');
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;'}[c]));
+
+// ---- Menü: Ansichten wechseln ----
+let mStack = [];
+function showView(v, push){
+  if (push !== false) mStack.push(v);
+  document.querySelectorAll('#menu .mview').forEach(el => el.hidden = el.dataset.v !== v);
+  const cur = document.querySelector(`#menu .mview[data-v="${v}"]`);
+  $('mTitle').textContent = cur.dataset.t; $('mBack').hidden = mStack.length < 2;
+  $('mNavEnd').hidden = !nav && !pendingDest;
+  if (v === 'dest') showRecent();
+  if (v === 'gpx') showGpxList();
+  if (v === 'rides') showRides();
+  if (v === 'stats') showStats();
+}
+function openMenu(){ mStack = []; $('menu').hidden = false; showView('main'); }
+function closeMenu(){ $('menu').hidden = true; altLayer.clearLayers(); }
+$('menuBtn').onclick = () => $('menu').hidden ? openMenu() : closeMenu();
+$('mClose').onclick = closeMenu;
+$('mBack').onclick = () => { mStack.pop(); altLayer.clearLayers(); showView(mStack[mStack.length-1], false); };
+document.querySelectorAll('#menu .mi[data-go]').forEach(b => b.onclick = () => showView(b.dataset.go));
+$('mNavEnd').onclick = () => { endNav(); closeMenu(); };
+
+// ---- Ziel ----
 function chooseDest(dest){
-  $('navPanel').hidden = true; map.closePopup();
+  closeMenu(); map.closePopup();
+  addRecent(dest);
   if (last) planRoutes(dest, last);
   else { pendingDest = dest; navShow('…', '', 'Warte auf GPS', dest.name || ''); }
 }
-
+function getRecent(){ try { return JSON.parse(localStorage.getItem('recent') || '[]'); } catch(_) { return []; } }
+function addRecent(d){
+  const list = getRecent().filter(r => haversine(r, d) > 30);
+  list.unshift({lat:d.lat, lon:d.lon, name:d.name || 'Ziel'});
+  try { localStorage.setItem('recent', JSON.stringify(list.slice(0, 8))); } catch(_) {}
+}
+function showRecent(){
+  const list = getRecent(), ul = $('recentList'); ul.textContent = '';
+  $('recentHead').hidden = !list.length;
+  list.forEach((r, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<div class="grow">${esc(r.name)}</div><button class="del" aria-label="Entfernen">✕</button>`;
+    li.onclick = () => chooseDest(r);
+    li.querySelector('.del').onclick = e => { e.stopPropagation(); const l = getRecent(); l.splice(i, 1);
+      try { localStorage.setItem('recent', JSON.stringify(l)); } catch(_) {} showRecent(); };
+    ul.appendChild(li);
+  });
+}
 async function searchPlace(q){
   const list = $('navResults');
   list.innerHTML = '<li class="muted">Suche …</li>';
@@ -700,35 +810,139 @@ async function searchPlace(q){
     if (!res.length) { list.innerHTML = '<li class="muted">Nichts gefunden</li>'; return; }
     for (const r of res) {
       const parts = r.display_name.split(', '), title = parts.slice(0, 2).join(', ');
-      const li = document.createElement('li'); li.textContent = title;
-      const sm = document.createElement('small'); sm.textContent = parts.slice(2).join(', '); li.appendChild(sm);
+      const li = document.createElement('li');
+      li.innerHTML = `<div class="grow">${esc(title)}<small>${esc(parts.slice(2).join(', '))}</small></div>`;
       li.onclick = () => chooseDest({lat:+r.lat, lon:+r.lon, name:title});
       list.appendChild(li);
     }
   } catch(_) { list.innerHTML = '<li class="muted">Suche fehlgeschlagen (kein Netz?)</li>'; }
 }
+$('navForm').onsubmit = e => { e.preventDefault(); const q = $('navQuery').value.trim(); if (q) { $('navQuery').blur(); searchPlace(q); } };
 
+// ---- Routen (GPX): laden, speichern, nachfahren ----
+function followPts(pts, name){
+  closeMenu();
+  setNav({mode:'gpx', steps:[], pts, dest:{lat:pts[pts.length-1][0], lon:pts[pts.length-1][1], name}}, true);
+}
 function loadGpx(file){
   const rd = new FileReader();
-  rd.onload = () => {
+  rd.onload = async () => {
     const doc = new DOMParser().parseFromString(rd.result, 'application/xml');
     let els = [...doc.getElementsByTagName('trkpt')];
     if (!els.length) els = [...doc.getElementsByTagName('rtept')];
     const pts = els.map(e => [+e.getAttribute('lat'), +e.getAttribute('lon')]).filter(p => isFinite(p[0]) && isFinite(p[1]));
     if (pts.length < 2) { alert('Keine Route in der GPX-Datei gefunden.'); return; }
     const nm = doc.getElementsByTagName('name')[0];
-    $('navPanel').hidden = true;
-    setNav({mode:'gpx', steps:[], pts, dest:{lat:pts[pts.length-1][0], lon:pts[pts.length-1][1],
-      name: nm ? nm.textContent.trim() : file.name.replace(/\.gpx$/i, '')}}, true);
+    const name = nm && nm.textContent.trim() ? nm.textContent.trim() : file.name.replace(/\.gpx$/i, '');
+    try { await DB.put('gpx', {id: Date.now(), name, pts, len: cumDist(pts).pop()}); } catch(_) {}
+    followPts(pts, name);
   };
   rd.readAsText(file);
 }
-
-$('navBtn').onclick = () => { $('navPanel').hidden = !$('navPanel').hidden; $('navEnd').hidden = !nav && !pendingDest; };
-$('navClose').onclick = () => { $('navPanel').hidden = true; };
-$('navEnd').onclick = () => { endNav(); $('navPanel').hidden = true; };
-$('navForm').onsubmit = e => { e.preventDefault(); const q = $('navQuery').value.trim(); if (q) { $('navQuery').blur(); searchPlace(q); } };
 $('gpxFile').onchange = e => { const f = e.target.files[0]; if (f) loadGpx(f); e.target.value = ''; };
+async function showGpxList(){
+  const ul = $('gpxList'); ul.innerHTML = '<li class="muted">Lade …</li>';
+  let list = []; try { list = await DB.all('gpx'); } catch(_) {}
+  ul.textContent = '';
+  if (!list.length) { ul.innerHTML = '<li class="muted">Noch keine Routen gespeichert. Tipp: in Komoot/Strava als GPX exportieren.</li>'; return; }
+  list.sort((a, b) => b.id - a.id).forEach(g => {
+    const li = document.createElement('li');
+    li.innerHTML = `<div class="grow">${esc(g.name)}<small>${km(g.len)} km</small></div><button class="del" aria-label="Löschen">✕</button>`;
+    li.onclick = () => followPts(g.pts, g.name);
+    li.querySelector('.del').onclick = async e => { e.stopPropagation();
+      if (confirm(`Route „${g.name}“ löschen?`)) { await DB.del('gpx', g.id); showGpxList(); } };
+    ul.appendChild(li);
+  });
+}
+
+// ---- Gefahrene Fahrten ----
+let curRide = null;
+async function showRides(){
+  const ul = $('rideList'); ul.innerHTML = '<li class="muted">Lade …</li>';
+  let list = []; try { list = await DB.all('rides'); } catch(_) {}
+  ul.textContent = '';
+  if (!list.length) { ul.innerHTML = '<li class="muted">Noch keine Fahrten. Eine Fahrt wird mit „Beenden“ gespeichert.</li>'; return; }
+  list.sort((a, b) => b.start - a.start).forEach(r => {
+    const li = document.createElement('li');
+    li.innerHTML = `<div class="grow">${fmtDate(r.start)}, ${new Date(r.start).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})}
+      <small>${km(r.dist)} km · ${fmtHM(r.moving)} · ↑${Math.round(r.climb)} m</small></div>`;
+    li.onclick = () => showRide(r);
+    ul.appendChild(li);
+  });
+}
+function showRide(r){
+  curRide = r;
+  const avg = r.moving > 0 ? r.dist / 1000 / (r.moving / 3600000) : 0;
+  $('rideInfo').innerHTML = [[km(r.dist) + ' km', 'Distanz'], [fmtHM(r.moving), 'Fahrzeit'], [avg.toFixed(1).replace('.', ','), 'Schnitt km/h'],
+    [r.max.toFixed(1).replace('.', ','), 'Max km/h'], ['↑' + Math.round(r.climb), 'Höhenmeter'], ['↓' + Math.round(r.desc || 0), 'Abwärts']]
+    .map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
+  showView('ride');
+  $('mTitle').textContent = fmtDate(r.start);
+  // Strecke auf der Karte zeigen (oberhalb des Menüs)
+  altLayer.clearLayers();
+  const segs = []; for (const p of r.rec) { if (p[4] || !segs.length) segs.push([]); segs[segs.length-1].push([p[0], p[1]]); }
+  const line = L.polyline(segs, {color:'#f0b429', weight:5, opacity:.95}).addTo(altLayer);
+  follow = false;
+  map.fitBounds(line.getBounds(), {paddingTopLeft:[30, 30], paddingBottomRight:[30, $('menu').offsetHeight + 24]});
+}
+function rideGpx(r){
+  const iso = s => new Date(s * 1000).toISOString();
+  let out = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Radcomputer" xmlns="http://www.topografix.com/GPX/1/1">\n`
+    + `<metadata><time>${iso(r.rec[0][2])}</time></metadata>\n<trk><name>Radfahrt ${fmtDate(r.start)}</name><type>cycling</type>\n`;
+  let open = false;
+  for (const p of r.rec) {
+    if (p[4] || !open) { if (open) out += '</trkseg>\n'; out += '<trkseg>\n'; open = true; }
+    out += `<trkpt lat="${p[0]}" lon="${p[1]}">${p[3] == null ? '' : `<ele>${p[3]}</ele>`}<time>${iso(p[2])}</time></trkpt>\n`;
+  }
+  return out + (open ? '</trkseg>\n' : '') + '</trk>\n</gpx>\n';
+}
+// Teilen-Menü von iOS (Strava, Komoot, Dateien …); sonst Download
+function shareFile(name, text){
+  const file = new File([text], name, {type:'application/gpx+xml'});
+  if (navigator.canShare && navigator.canShare({files:[file]})) {
+    navigator.share({files:[file], title:name}).catch(e => { if (e.name !== 'AbortError') download(); });
+  } else download();
+  function download(){
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+}
+$('rideShare').onclick = () => { if (curRide) shareFile(`Radfahrt-${new Date(curRide.start).toISOString().slice(0, 10)}.gpx`, rideGpx(curRide)); };
+$('rideFollow').onclick = () => { if (curRide) followPts(curRide.rec.map(p => [p[0], p[1]]), 'Fahrt vom ' + fmtDate(curRide.start)); };
+$('rideDel').onclick = async () => {
+  if (!curRide || !confirm('Diese Fahrt löschen?')) return;
+  await DB.del('rides', curRide.id); curRide = null; altLayer.clearLayers();
+  mStack.pop(); showView('rides', false);
+};
+
+// ---- Statistik ----
+async function showStats(){
+  const box = $('statsBox'); box.textContent = 'Lade …';
+  let rides = []; try { rides = await DB.all('rides'); } catch(_) {}
+  if (!rides.length) { box.innerHTML = '<div class="navhint">Noch keine Fahrten gespeichert.</div>'; return; }
+  const now = new Date(), day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const week = new Date(day - ((day.getDay() + 6) % 7) * 86400000);      // Montag
+  const periods = [['Woche', week], ['Monat', new Date(now.getFullYear(), now.getMonth(), 1)],
+                   ['Jahr', new Date(now.getFullYear(), 0, 1)], ['Gesamt', new Date(0)]];
+  let html = '<table class="st"><tr><th></th><th>Fahrten</th><th>km</th><th>Zeit</th><th>Hm</th></tr>';
+  for (const [label, from] of periods) {
+    const rs = rides.filter(r => r.start >= +from);
+    const sum = f => rs.reduce((a, r) => a + (f(r) || 0), 0);
+    html += `<tr><td>${label}</td><td>${rs.length}</td><td>${km(sum(r => r.dist))}</td><td>${fmtHM(sum(r => r.moving))}</td><td>${Math.round(sum(r => r.climb))}</td></tr>`;
+  }
+  html += '</table>';
+  const best = f => rides.reduce((m, r) => f(r) > f(m) ? r : m, rides[0]);
+  const lng = best(r => r.dist), fast = best(r => r.max), high = best(r => r.climb);
+  const avgOf = r => r.moving > 0 && r.dist > 5000 ? r.dist / 1000 / (r.moving / 3600000) : 0, avg = best(avgOf);
+  html += '<div class="msec">Rekorde</div><div class="kv">'
+    + `<div><b>${km(lng.dist)}</b><span>Längste km</span></div>`
+    + `<div><b>${fast.max.toFixed(1).replace('.', ',')}</b><span>Max km/h</span></div>`
+    + `<div><b>↑${Math.round(high.climb)}</b><span>Meiste Hm</span></div>`
+    + (avgOf(avg) ? `<div><b>${avgOf(avg).toFixed(1).replace('.', ',')}</b><span>Bester Schnitt</span></div>` : '')
+    + '</div>';
+  box.innerHTML = html;
+}
+
 // Langes Drücken auf die Karte (bzw. Rechtsklick am PC) → Ziel setzen
 map.on('contextmenu', e => {
   const b = document.createElement('button'); b.textContent = 'Hierhin navigieren';
