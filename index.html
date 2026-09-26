@@ -47,20 +47,21 @@
   .dot.on{background:var(--accent)}
   /* Navigation */
   .navbtn{position:absolute;left:10px;bottom:10px;z-index:1000;width:auto;padding:10px 16px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
-  /* Navi-Leiste: Reihe der nächsten Richtungen, je Pfeil + Meter; die nächste groß hervorgehoben */
-  #navBar{position:absolute;top:8px;left:8px;right:8px;z-index:1000;display:flex;flex-direction:column;gap:5px;
-    background:rgba(22,27,34,.95);border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
-  #navSteps{display:flex;flex-wrap:wrap;align-items:center;gap:6px;height:44px;overflow:hidden}  /* was nicht passt, rutscht in die unsichtbare 2. Zeile */
-  .st{display:flex;align-items:center;gap:6px;flex:none;padding:5px 9px;border-radius:9px;background:var(--bg);white-space:nowrap}
-  .st .a{font-size:20px;line-height:1;color:#4ea1ff}
-  .st .d{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px}
-  .st .t{font-size:14px}
-  .st.now{background:#4ea1ff;padding:6px 12px}
-  .st.now .a,.st.now .d,.st.now .t{color:var(--bg)}
-  .st.now .a{font-size:30px}
-  .st.now .d{font-size:20px}
-  #navInfo{font-size:12px;color:var(--muted);padding:0 4px}
-  #navInfo:empty{display:none}
+  /* Navi-Anzeige frei auf der Karte (ohne Kachel): Mitte = nächste Abbiegung, rechts = Ziel/Rest/Ankunft.
+     Scharfe dunkle Kontur statt weichem Schatten, damit es auf der Karte lesbar bleibt, aber nicht verschwimmt. */
+  #navBar{position:absolute;top:6px;left:0;right:0;z-index:1000;pointer-events:none;
+    color:#fff;paint-order:stroke fill;-webkit-text-stroke:4px var(--bg)}
+  #navNow{display:flex;flex-direction:column;align-items:center;margin:0 auto;max-width:calc(100% - 150px)}
+  #navNow .row{display:flex;align-items:center;gap:6px}
+  #navArrow{width:58px;height:58px;display:flex;align-items:center;justify-content:center;font-size:40px;line-height:1;-webkit-text-stroke:0}
+  #navArrow svg{width:58px;height:58px;display:block}
+  #navDist{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:28px}
+  #navDist:empty{display:none}
+  #navText{font-weight:600;font-size:15px;text-align:center}
+  #navSub{font-size:12px;text-align:center;color:#c9d1d9;-webkit-text-stroke:3px var(--bg)}
+  #navText:empty,#navSub:empty{display:none}
+  #navEta{position:absolute;top:0;right:10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;line-height:1.3}
+  #navEta .f{font-size:22px;-webkit-text-stroke:0}
   /* Quellenangabe der Karte klein und dunkel */
   .leaflet-container .leaflet-control-attribution{background:rgba(14,17,22,.6);color:#6b7480;font-size:9px;padding:0 4px}
   .leaflet-control-attribution a{color:#8b949e}
@@ -89,8 +90,11 @@
 <div id="mapWrap">
   <div id="map"></div>
   <div id="navBar" hidden>
-    <div id="navSteps"></div>
-    <div id="navInfo"></div>
+    <div id="navNow">
+      <div class="row"><div id="navArrow"></div><div id="navDist"></div></div>
+      <div id="navText"></div><div id="navSub"></div>
+    </div>
+    <div id="navEta" hidden><div class="f">🏁</div><div id="navRest"></div><div id="navTime"></div></div>
   </div>
   <button class="sec navbtn" id="navBtn">Ziel</button>
   <div id="navPanel" hidden>
@@ -347,7 +351,7 @@ let pendingDest = null;  // Ziel gewählt, aber noch keine GPS-Position
 let routing = false, offCount = 0, lastReroute = 0, arriveTimer = null;
 
 const ll = p => ({lat:p[0], lon:p[1]});
-const fmtDist = m => m < 995 ? `${Math.round(m/10)*10} m` : `${(m/1000).toFixed(1)} km`;
+const fmtDist = m => m < 995 ? `${Math.round(m/10)*10} m` : `${(m/1000).toFixed(1).replace('.', ',')} km`;
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 
 // Abbiegehinweise auf Deutsch aus den OSRM-Schritten
@@ -370,22 +374,25 @@ function stepText(s){
   return {a:ARROW[mod] || '↑', t:cap(DIR[mod] || 'weiter') + on};
 }
 
-// Navi-Leiste füllen: chips = [{a:Pfeil, d:Entfernungstext, t:Text (optional)}], der erste wird groß dargestellt
-function navChips(chips, info){
+// Pfeile als SVG (scharf, blau mit dunkler Kontur); Winkel je Richtungszeichen aus stepText()
+const ANGLE = {'↑':0, '↗':45, '→':90, '↘':135, '⤺':180, '↙':-135, '←':-90, '↖':-45};
+function arrowSvg(a){
+  if (a === '⟳') return '<svg viewBox="-50 -50 100 100"><circle r="26" fill="none" stroke="#0e1116" stroke-width="18"/>'
+    + '<circle r="26" fill="none" stroke="#4ea1ff" stroke-width="10"/><path d="M26,-30 L44,-4 L12,-4 Z" fill="#4ea1ff" stroke="#0e1116" stroke-width="4" stroke-linejoin="round" paint-order="stroke"/></svg>';
+  if (!(a in ANGLE)) return null;
+  return `<svg viewBox="-50 -50 100 100"><path transform="rotate(${ANGLE[a]})" d="M0,-44 L32,-6 L11,-6 L11,42 L-11,42 L-11,-6 L-32,-6 Z"
+    fill="#4ea1ff" stroke="#0e1116" stroke-width="7" stroke-linejoin="round" paint-order="stroke"/></svg>`;
+}
+// Navi-Anzeige: Mitte Pfeil + Meter (+ optional Text/Untertext), rechts oben 🏁 mit Rest-km und Ankunftszeit
+function navShow(arrow, dist, text, sub, eta){
   clearTimeout(arriveTimer);
   $('navBar').hidden = false;
-  const box = $('navSteps'); box.textContent = '';
-  chips.forEach((c, i) => {
-    const el = document.createElement('div'); el.className = i ? 'st' : 'st now';
-    for (const [k, v] of [['a', c.a], ['d', c.d], ['t', c.t]]) if (v) {
-      const s = document.createElement('span'); s.className = k; s.textContent = v; el.appendChild(s);
-    }
-    box.appendChild(el);
-  });
-  $('navInfo').textContent = info || '';
+  const svg = arrowSvg(arrow);
+  if (svg) $('navArrow').innerHTML = svg; else $('navArrow').textContent = arrow;
+  $('navDist').textContent = dist || ''; $('navText').textContent = text || ''; $('navSub').textContent = sub || '';
+  $('navEta').hidden = !eta;
+  if (eta) { $('navRest').textContent = eta.rest; $('navTime').textContent = eta.time; }
 }
-// Statusmeldung (Route wird berechnet, Ziel erreicht …) als einzelnes Feld
-const navShow = (arrow, dist, text, info) => navChips([{a:arrow, d:dist, t:text}], info);
 
 function setNav(n, fit){
   n.cum = [0];
@@ -461,16 +468,17 @@ function updateNav(pt, acc){
   const avg = movingMs > 60000 ? (distM/1000)/(movingMs/3600000) : 0;
   const eta = new Date(Date.now() + rest / ((avg > 5 ? avg : 18)/3.6) * 1000)
     .toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
-  const info = `Noch ${fmtDist(rest)} · Ankunft ${eta}`;
+  const info = {rest: fmtDist(rest), time: eta};
   if (offCount >= 3) {
     if (nav.mode === 'route' && Date.now() - lastReroute > 10000) { lastReroute = Date.now(); routeTo(nav.dest, pt, false); return; }
-    navShow('⚠', fmtDist(p.dist), 'neben der Route', info);
+    navShow('⚠', fmtDist(p.dist), 'neben der Route', '', info);
     return;
   }
-  // Die nächsten Richtungen mit Entfernung ab jetzt (so viele, wie in die Leiste passen); am Ende immer das Ziel
-  const next = nav.steps.filter(s => s.d > nav.along + 3).slice(0, 5).map(s => ({a:s.a, d:fmtDist(s.d - nav.along)}));
-  if (!next.length || next[next.length-1].a !== '🏁' && next.length < 5) next.push({a:'🏁', d:fmtDist(rest)});
-  navChips(next, info);
+  // Nur die nächste Abbiegung (danach nur noch das Ziel)
+  const next = nav.steps.find(s => s.d > nav.along + 3);
+  const exit = next && next.a === '⟳' ? (next.t.match(/\d+\. Ausfahrt/) || [''])[0] : '';  // beim Kreisverkehr: welche Ausfahrt
+  if (next) navShow(next.a, fmtDist(next.d - nav.along), exit, '', info);
+  else navShow('🏁', fmtDist(rest), '', '', info);
 }
 
 function chooseDest(dest){
