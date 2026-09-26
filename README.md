@@ -29,6 +29,13 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 - **Fahrzeit:** Zählt nur, wenn Tempo > 0 und der letzte GPS-Punkt jünger als 5 s ist (bei Signalverlust steht die Zeit, Anzeige „Kein GPS-Signal“).
 - **Schnitt:** Distanz ÷ Bewegungszeit. **Max:** höchstes Tempo bei guter Genauigkeit und < 120 km/h (GPS-Ausreißer werden ignoriert).
 - **Höhe:** `coords.altitude` (GPS-Höhe, ungefiltert, schwankt ein paar Meter).
+- **Navigation** (Knopf „Ziel“ unten links auf der Karte):
+  - Ziel per **Adresssuche** (Nominatim/OSM, bevorzugt Treffer in der Nähe), per **langem Drücken auf die Karte** oder als **GPX-Route** (z. B. aus Komoot/Strava).
+  - Fahrradroute vom **FOSSGIS-Routingserver** (`routing.openstreetmap.de/routed-bike`, OSRM, kostenlos, ohne Key).
+  - Leiste oben: Pfeil + Entfernung zum nächsten Abbiegen + Hinweis auf Deutsch (z. B. „Rechts abbiegen · Christianstraße“), darunter Restdistanz und Ankunftszeit (eigener Schnitt, sonst 18 km/h).
+  - Mehr als 40 m neben der Route (3 GPS-Punkte hintereinander) → Route wird neu berechnet (höchstens alle 10 s). Bei GPX-Routen nur Warnung „neben der Route“ mit Abstand, ohne Abbiegehinweise.
+  - Ziel erreicht bei < 25 m Rest. Navigation wird in `localStorage` (Schlüssel `nav`) gesichert und beim Öffnen wiederhergestellt.
+  - Funktioniert unabhängig von Start/Pause (Navi geht auch ohne Aufzeichnung).
 - **Start / Pause / Weiter / Reset** (Reset mit Sicherheitsabfrage).
 - **Fahrt wird gesichert** in `localStorage` (Schlüssel `ride`): bei jedem GPS-Punkt, alle 5 s während der Fahrt und bei Start/Pause/Reset. Beim Öffnen wird sie wiederhergestellt, der Knopf zeigt dann „Weiter“.
 - **Bildschirm bleibt an** während der Fahrt (Wake Lock API + Video-Trick, siehe unten).
@@ -46,7 +53,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 2. **Web-Apps auf iOS bekommen bei gesperrtem Bildschirm kein GPS.** Deshalb muss der Bildschirm an bleiben. Das Drücken der Seitentaste unterbricht die Aufzeichnung trotzdem.
 3. **GPS braucht HTTPS** (oder `localhost`). Einfaches `http://` über das Heimnetz funktioniert auf dem iPhone nicht.
 4. **Karte absichtlich OpenStreetMap statt Google Maps:** Google Maps JS API braucht einen API-Key mit Kreditkarte. Der Nutzer wollte ursprünglich Google Maps, OSM ist bewusst der kostenlose Ersatz (siehe offene Punkte).
-5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v4'` → `v5` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
+5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v5'` → `v6` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
 
 ---
 
@@ -118,6 +125,7 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 ## Bekannte Einschränkungen
 
 - Seitentaste gedrückt / Bildschirm gesperrt → keine GPS-Punkte in der Zeit.
+- Adresssuche und Routenberechnung brauchen Netz (die Route selbst bleibt nach dem Berechnen offline nutzbar, Neuberechnung aber nicht). Keine Sprachansage.
 - Bildschirm an kostet Akku, bei langen Touren Powerbank.
 - Höhe ist rohe GPS-Höhe (±10 m typisch).
 - `localStorage` wird gelöscht, wenn Website-Daten in Safari gelöscht werden. iOS kann Daten von Web-Apps, die mehrere Wochen nicht geöffnet wurden, ebenfalls löschen.
@@ -130,5 +138,6 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 - Keine Build-Tools, kein npm nötig. Einfach Dateien bearbeiten.
 - Zentrale Zustandsvariablen in `index.html`: `running`, `distM`, `maxKmh`, `movingMs`, `last`, `track` (Leaflet-Polyline mit Abschnitten, gespeichert als Liste von Abschnitten), `newSeg`, `lastFixAt`.
 - Wichtige Funktionen: `onPos` (GPS-Verarbeitung), `render` (Anzeige), `save`/`restore` (localStorage), `keepAwake` (Wake Lock + Video).
+- Navigation: `nav` (aktive Route), `routeTo` (OSRM-Abfrage), `stepText` (Abbiegehinweise auf Deutsch), `project` (Position auf Route projizieren), `updateNav` (bei jedem GPS-Punkt), `searchPlace` (Nominatim), `loadGpx`. `sw.js` cached Nominatim/Routing absichtlich nicht.
 - Farben als CSS-Variablen in `:root` (`--accent` grün `#3ddc97`, `--warn` orange für Pause).
 - Getestet: Headless Chromium mit simuliertem GPS: keine JS-Fehler, Start/Pause, Speichern, Keep-Awake-Video läuft. **Nicht** getestet: echtes iPhone (Nutzer testet selbst).

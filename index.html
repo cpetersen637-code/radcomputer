@@ -21,7 +21,9 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden}
   body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-  #map{flex:1;min-height:30vh;border-bottom:1px solid var(--line)}
+  [hidden]{display:none!important}
+  #mapWrap{flex:1;min-height:30vh;position:relative;border-bottom:1px solid var(--line)}
+  #map{position:absolute;inset:0}
   .leaflet-container{background:#1b2027}
   /* OSM-Standardkarte per Filter abdunkeln (Strecke/Marker liegen in anderen Ebenen und bleiben farbig) */
   .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)}
@@ -42,15 +44,55 @@
   .status{font-size:12px;color:var(--muted);text-align:center;min-height:16px}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:middle}
   .dot.on{background:var(--accent)}
+  /* Navigation */
+  .navbtn{position:absolute;left:10px;bottom:10px;z-index:1000;width:auto;padding:10px 16px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  #navBar{position:absolute;top:8px;left:8px;right:8px;z-index:1000;display:flex;align-items:center;gap:10px;
+    background:rgba(22,27,34,.95);border:1px solid var(--line);border-radius:12px;padding:8px 12px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  #navArrow{font-size:34px;line-height:1;min-width:36px;text-align:center;color:#4ea1ff}
+  #navBar .nb{flex:1;min-width:0}
+  #navMain{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+  #navDist{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;margin-right:6px}
+  #navInfo{font-size:12px;color:var(--muted);margin-top:2px}
+  #navPanel{position:absolute;left:8px;right:8px;bottom:8px;z-index:1001;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(100% - 16px);overflow-y:auto;box-shadow:0 2px 12px rgba(0,0,0,.6)}
+  #navPanel form{display:flex;gap:6px}
+  #navPanel input[type=search]{flex:1;min-width:0;font:16px Inter,sans-serif;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+  #navPanel form button{padding:10px 14px}
+  #navResults{list-style:none;display:flex;flex-direction:column;gap:4px}
+  #navResults li{padding:9px 10px;border-radius:8px;background:var(--bg);font-size:14px;cursor:pointer}
+  #navResults li.muted{background:none;color:var(--muted);cursor:default}
+  #navResults li small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  .navrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .navrow button,.navrow label{padding:10px 6px;font-size:14px}
+  label.sec{font:600 14px Inter,sans-serif;border-radius:10px;text-align:center;cursor:pointer;background:var(--bg);color:var(--text);border:1px solid var(--line)}
+  .navhint{font-size:12px;color:var(--muted);text-align:center}
+  .leaflet-popup-content button{padding:8px 12px;font-size:14px}
   @media (orientation:landscape) and (max-height:500px){
     body{flex-direction:row}
-    #map{border-bottom:0;border-right:1px solid var(--line)}
+    #mapWrap{border-bottom:0;border-right:1px solid var(--line)}
     .dash{width:46%;overflow-y:auto}
   }
 </style>
 </head>
 <body>
-<div id="map"></div>
+<div id="mapWrap">
+  <div id="map"></div>
+  <div id="navBar" hidden>
+    <div id="navArrow">↑</div>
+    <div class="nb"><div id="navMain"><span id="navDist"></span><span id="navText"></span></div><div id="navInfo"></div></div>
+  </div>
+  <button class="sec navbtn" id="navBtn">Ziel</button>
+  <div id="navPanel" hidden>
+    <form id="navForm"><input type="search" id="navQuery" placeholder="Adresse oder Ort suchen" enterkeyhint="search" autocomplete="off"><button type="submit">Suchen</button></form>
+    <ul id="navResults"></ul>
+    <div class="navrow">
+      <label class="sec">GPX laden<input type="file" id="gpxFile" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden></label>
+      <button class="sec" id="navEnd">Navi beenden</button>
+      <button class="sec" id="navClose">Schließen</button>
+    </div>
+    <div class="navhint">Tipp: Lange auf die Karte drücken, um dort ein Ziel zu setzen.</div>
+  </div>
+</div>
 <div class="dash">
   <div class="speed"><span class="val" id="speed">0.0</span><span class="unit">km/h</span></div>
   <div class="grid">
@@ -76,6 +118,9 @@ const map = L.map('map', {zoomControl:false, attributionControl:true}).setView([
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende'
 }).addTo(map);
+// Geplante Route (Navigation) – vor der gefahrenen Strecke angelegt, damit sie darunter liegt
+const routeLine = L.polyline([], {color:'#4ea1ff', weight:7, opacity:.7}).addTo(map);
+const destMarker = L.circleMarker([0,0], {radius:7, color:'#fff', weight:2, fillColor:'#4ea1ff', fillOpacity:1});
 // Strecke in Abschnitten: nach jeder Pause beginnt ein neuer (keine gerade Linie über die Pause)
 const track = L.polyline([[]], {color:'#3ddc97', weight:5, opacity:.9}).addTo(map);
 const me = L.circleMarker([0,0], {radius:8, color:'#fff', weight:3, fillColor:'#3ddc97', fillOpacity:1});
@@ -144,6 +189,7 @@ function onPos(p){
   last = pt;
   window._kmh = kmh;
   render(kmh);
+  updateNav(pt, c.accuracy);
   save();
 }
 
@@ -244,7 +290,187 @@ $('resetBtn').onclick = () => {
 map.on('dragstart', () => follow = false);
 setInterval(() => { if (running) save(); }, 5000);
 
+// ---- Navigation: Fahrradroute (FOSSGIS/OSRM) + Adresssuche (Nominatim), beides kostenlos ohne Key ----
+const ROUTER = 'https://routing.openstreetmap.de/routed-bike/route/v1/driving/';
+const GEOCODER = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=de&q=';
+let nav = null;          // {mode:'route'|'gpx', dest:{lat,lon,name}, pts:[[lat,lon]], steps:[{d,a,t}], cum, total, idx, along}
+let pendingDest = null;  // Ziel gewählt, aber noch keine GPS-Position
+let routing = false, offCount = 0, lastReroute = 0, arriveTimer = null;
+
+const ll = p => ({lat:p[0], lon:p[1]});
+const fmtDist = m => m < 995 ? `${Math.round(m/10)*10} m` : `${(m/1000).toFixed(1)} km`;
+const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+
+// Abbiegehinweise auf Deutsch aus den OSRM-Schritten
+const ARROW = {uturn:'⤺', 'sharp right':'↘', right:'→', 'slight right':'↗', straight:'↑', 'slight left':'↖', left:'←', 'sharp left':'↙'};
+const DIR = {uturn:'wenden', 'sharp right':'scharf rechts abbiegen', right:'rechts abbiegen', 'slight right':'leicht rechts halten',
+  straight:'geradeaus weiter', 'slight left':'leicht links halten', left:'links abbiegen', 'sharp left':'scharf links abbiegen'};
+function stepText(s){
+  const m = s.maneuver, mod = m.modifier || 'straight', side = mod.includes('left') ? 'links' : 'rechts';
+  const name = s.name || s.ref || '', on = name ? ` · ${name}` : '';
+  switch (m.type) {
+    case 'depart': return {a:'↑', t:'Losfahren' + on};
+    case 'arrive': return {a:'🏁', t:'Ziel erreicht'};
+    case 'roundabout': case 'rotary': case 'roundabout turn':
+      return {a:'⟳', t:`Im Kreisverkehr ${m.exit ? m.exit + '. Ausfahrt' : 'ausfahren'}${on}`};
+    case 'exit roundabout': case 'exit rotary': return null;   // schon beim Kreisverkehr angesagt
+    case 'new name': case 'continue': if (mod === 'straight') return null; break;
+    case 'end of road': return {a:ARROW[mod] || '↑', t:`Am Straßenende ${side}${on}`};
+    case 'fork': return {a:ARROW[mod] || '↑', t:`An der Gabelung ${side} halten${on}`};
+  }
+  return {a:ARROW[mod] || '↑', t:cap(DIR[mod] || 'weiter') + on};
+}
+
+function navShow(arrow, dist, text, info){
+  clearTimeout(arriveTimer);
+  $('navBar').hidden = false;
+  $('navArrow').textContent = arrow; $('navDist').textContent = dist;
+  $('navText').textContent = text; $('navInfo').textContent = info || '';
+}
+
+function setNav(n, fit){
+  n.cum = [0];
+  for (let i = 1; i < n.pts.length; i++) n.cum.push(n.cum[i-1] + haversine(ll(n.pts[i-1]), ll(n.pts[i])));
+  n.total = n.cum[n.cum.length-1]; n.idx = 0; n.along = 0;
+  nav = n; offCount = 0;
+  routeLine.setLatLngs(n.pts);
+  destMarker.setLatLng([n.dest.lat, n.dest.lon]); if (!map.hasLayer(destMarker)) destMarker.addTo(map);
+  try { localStorage.setItem('nav', JSON.stringify({mode:n.mode, dest:n.dest, steps:n.steps,
+    pts:n.pts.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)])})); } catch(_) {}
+  if (fit) { follow = running; map.fitBounds(routeLine.getBounds(), {padding:[40,40]}); }
+  if (last) updateNav(last, 0);
+  else navShow('↑', '', n.mode === 'gpx' ? 'GPX-Route geladen' : 'Route berechnet', `${fmtDist(n.total)} · warte auf GPS`);
+}
+
+function endNav(){
+  nav = null; pendingDest = null;
+  routeLine.setLatLngs([]); if (map.hasLayer(destMarker)) map.removeLayer(destMarker);
+  $('navBar').hidden = true;
+  try { localStorage.removeItem('nav'); } catch(_) {}
+}
+
+async function routeTo(dest, from, fit){
+  routing = true;
+  navShow('…', '', nav ? 'Neue Route wird berechnet' : 'Route wird berechnet', dest.name || '');
+  try {
+    const res = await fetch(`${ROUTER}${from.lon},${from.lat};${dest.lon},${dest.lat}?overview=full&geometries=geojson&steps=true`);
+    const r = await res.json();
+    if (r.code !== 'Ok' || !r.routes || !r.routes.length) throw new Error(r.message || 'keine Route gefunden');
+    const rt = r.routes[0], steps = []; let d = 0;
+    for (const s of rt.legs.flatMap(l => l.steps)) { const x = stepText(s); if (x) steps.push({d, a:x.a, t:x.t}); d += s.distance; }
+    routing = false;
+    setNav({mode:'route', dest, steps, pts: rt.geometry.coordinates.map(([lon, lat]) => [lat, lon])}, fit);
+  } catch(e) {
+    navShow('⚠', '', 'Routing fehlgeschlagen', e.message + (navigator.onLine ? '' : ' (offline)'));
+  } finally { routing = false; }
+}
+
+// Position auf die Route projizieren: nächster Punkt auf der Linie + gefahrene Strecke entlang der Route
+function project(lat, lon){
+  const pts = nav.pts, kx = Math.cos(lat*Math.PI/180)*111320, ky = 110540;
+  let best = {dist:Infinity, i:0, along:0};
+  const scan = (from, to) => {
+    for (let i = Math.max(0, from); i < Math.min(pts.length-1, to); i++) {
+      const ax = (pts[i][1]-lon)*kx, ay = (pts[i][0]-lat)*ky, dx = (pts[i+1][1]-pts[i][1])*kx, dy = (pts[i+1][0]-pts[i][0])*ky;
+      const l2 = dx*dx + dy*dy, t = l2 ? Math.max(0, Math.min(1, -(ax*dx + ay*dy)/l2)) : 0;
+      const d = Math.hypot(ax + t*dx, ay + t*dy);
+      if (d < best.dist) best = {dist:d, i, along: nav.cum[i] + t*(nav.cum[i+1]-nav.cum[i])};
+    }
+  };
+  scan(nav.idx - 10, nav.idx + 300);           // zuerst in der Nähe der letzten Position (wichtig bei Rundkursen)
+  if (best.dist > 40) scan(0, pts.length);     // sonst ganze Route
+  return best;
+}
+
+function updateNav(pt, acc){
+  if (pendingDest && !routing) { const d = pendingDest; pendingDest = null; routeTo(d, pt, true); return; }
+  if (!nav || routing) return;
+  const p = project(pt.lat, pt.lon);
+  if (acc < 30) {
+    if (p.dist > 40) offCount++;
+    else { offCount = 0; nav.idx = p.i; nav.along = p.along; }
+  }
+  const rest = Math.max(0, nav.total - nav.along);
+  if (rest < 25) {
+    const name = nav.dest.name || '';
+    endNav();
+    navShow('🏁', '', 'Ziel erreicht', name);
+    arriveTimer = setTimeout(() => { if (!nav) $('navBar').hidden = true; }, 10000);
+    return;
+  }
+  // Ankunftszeit: eigener Schnitt, solange noch keiner da ist 18 km/h
+  const avg = movingMs > 60000 ? (distM/1000)/(movingMs/3600000) : 0;
+  const eta = new Date(Date.now() + rest / ((avg > 5 ? avg : 18)/3.6) * 1000)
+    .toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+  const info = `Noch ${fmtDist(rest)} · Ankunft ${eta}`;
+  if (offCount >= 3) {
+    if (nav.mode === 'route' && Date.now() - lastReroute > 10000) { lastReroute = Date.now(); routeTo(nav.dest, pt, false); return; }
+    navShow('⚠', fmtDist(p.dist), 'neben der Route', info);
+    return;
+  }
+  const next = nav.steps.find(s => s.d > nav.along + 3);
+  if (next) navShow(next.a, fmtDist(next.d - nav.along), next.t, info);
+  else navShow('↑', fmtDist(rest), 'der Route folgen', info);
+}
+
+function chooseDest(dest){
+  $('navPanel').hidden = true; map.closePopup();
+  if (last) routeTo(dest, last, true);
+  else { pendingDest = dest; navShow('…', '', 'Warte auf GPS', dest.name || ''); }
+}
+
+async function searchPlace(q){
+  const list = $('navResults');
+  list.innerHTML = '<li class="muted">Suche …</li>';
+  let url = GEOCODER + encodeURIComponent(q);
+  if (last) url += `&viewbox=${last.lon-0.5},${last.lat+0.3},${last.lon+0.5},${last.lat-0.3}`;  // Treffer in der Nähe bevorzugen
+  try {
+    const res = await (await fetch(url)).json();
+    list.innerHTML = '';
+    if (!res.length) { list.innerHTML = '<li class="muted">Nichts gefunden</li>'; return; }
+    for (const r of res) {
+      const parts = r.display_name.split(', '), title = parts.slice(0, 2).join(', ');
+      const li = document.createElement('li'); li.textContent = title;
+      const sm = document.createElement('small'); sm.textContent = parts.slice(2).join(', '); li.appendChild(sm);
+      li.onclick = () => chooseDest({lat:+r.lat, lon:+r.lon, name:title});
+      list.appendChild(li);
+    }
+  } catch(_) { list.innerHTML = '<li class="muted">Suche fehlgeschlagen (kein Netz?)</li>'; }
+}
+
+function loadGpx(file){
+  const rd = new FileReader();
+  rd.onload = () => {
+    const doc = new DOMParser().parseFromString(rd.result, 'application/xml');
+    let els = [...doc.getElementsByTagName('trkpt')];
+    if (!els.length) els = [...doc.getElementsByTagName('rtept')];
+    const pts = els.map(e => [+e.getAttribute('lat'), +e.getAttribute('lon')]).filter(p => isFinite(p[0]) && isFinite(p[1]));
+    if (pts.length < 2) { alert('Keine Route in der GPX-Datei gefunden.'); return; }
+    const nm = doc.getElementsByTagName('name')[0];
+    $('navPanel').hidden = true;
+    setNav({mode:'gpx', steps:[], pts, dest:{lat:pts[pts.length-1][0], lon:pts[pts.length-1][1],
+      name: nm ? nm.textContent.trim() : file.name.replace(/\.gpx$/i, '')}}, true);
+  };
+  rd.readAsText(file);
+}
+
+$('navBtn').onclick = () => { $('navPanel').hidden = !$('navPanel').hidden; $('navEnd').hidden = !nav && !pendingDest; };
+$('navClose').onclick = () => { $('navPanel').hidden = true; };
+$('navEnd').onclick = () => { endNav(); $('navPanel').hidden = true; };
+$('navForm').onsubmit = e => { e.preventDefault(); const q = $('navQuery').value.trim(); if (q) { $('navQuery').blur(); searchPlace(q); } };
+$('gpxFile').onchange = e => { const f = e.target.files[0]; if (f) loadGpx(f); e.target.value = ''; };
+// Langes Drücken auf die Karte (bzw. Rechtsklick am PC) → Ziel setzen
+map.on('contextmenu', e => {
+  const b = document.createElement('button'); b.textContent = 'Hierhin navigieren';
+  b.onclick = () => chooseDest({lat:e.latlng.lat, lon:e.latlng.lng, name:'Punkt auf der Karte'});
+  L.popup({closeButton:false}).setLatLng(e.latlng).setContent(b).openOn(map);
+});
+function restoreNav(){
+  try { const n = JSON.parse(localStorage.getItem('nav') || 'null'); if (n && n.pts && n.pts.length > 1) setNav(n, false); } catch(_) {}
+}
+
 restore();
+restoreNav();
 startGps(); // Position schon vor dem Start anzeigen
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

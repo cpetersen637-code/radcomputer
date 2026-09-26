@@ -1,5 +1,5 @@
 // Offline-Cache: App-Dateien + zuletzt geladene Kartenkacheln
-const APP = 'radcomputer-v4';
+const APP = 'radcomputer-v5';
 const TILES = 'radcomputer-tiles-osm';  // neuer Name: alte CARTO-Kacheln ("API key required") werden gelöscht
 const CORE = [
   './', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './keepawake.mp4', './keepawake.webm',
@@ -20,6 +20,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = e.request.url;
   if (e.request.method !== 'GET') return;
+  // Adresssuche und Routing immer live aus dem Netz, nicht cachen
+  if (url.includes('nominatim.openstreetmap.org') || url.includes('routing.openstreetmap.de')) return;
 
   // Kartenkacheln: erst Cache, sonst Netz und merken (max. ~2000 Kacheln)
   if (url.includes('tile.openstreetmap.org')) {
