@@ -24,11 +24,11 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 ## Funktionen (Stand jetzt)
 
 - **Karte:** Leaflet 1.9.4 + MapLibre GL 4.7.1 (via unpkg-CDN, Plugin `maplibre-gl-leaflet`). Vektorkarte von **OpenFreeMap** (OSM-Daten, kostenlos, ohne Key), Basis-Stil „liberty“, per `darkStyle()` komplett umgefärbt (Farben in `MAPCOL` oben im Script). Ohne WebGL oder wenn der Stil nicht lädt: OSM-Rasterkarte grau abgedunkelt. (CARTO verlangt seit 2026 einen API-Key.) Folgt der Position. Wer die Karte verschiebt, schaltet das Folgen ab, „Zentrieren“ schaltet es wieder ein.
-- **Tacho:** Nimmt `coords.speed` vom GPS, sonst Strecke ÷ Zeit. Unter 1,5 km/h wird 0 angezeigt.
-- **Distanz:** Haversine zwischen GPS-Punkten. Rauschfilter: Punkt zählt nur bei Genauigkeit < 30 m, Abstand > 2 m und < 120 km/h. Nach Start/Weiter beginnt ein neuer Streckenabschnitt, die Strecke während der Pause zählt nicht.
+- **Tacho:** Nimmt `coords.speed` vom GPS, sonst Strecke ÷ Zeit (nur zwischen zwei genauen Punkten ≥ 1 s auseinander). Werte > 90 km/h werden verworfen, angezeigt wird der Median der letzten 3 Werte (einzelne Ausreißer kommen nicht durch, auch nicht ins Max). Unter 1,5 km/h wird 0 angezeigt.
+- **Distanz:** Haversine ab dem letzten Streckenpunkt (`lastGood`). Punkt zählt nur bei Genauigkeit < 30 m, Abstand > 3 m und Streckentempo < 90 km/h (so wird auch langsames Fahren korrekt summiert). Nach Start/Weiter beginnt ein neuer Streckenabschnitt, die Strecke während der Pause zählt nicht.
 - **Fahrzeit:** Zählt nur, wenn Tempo > 0 und der letzte GPS-Punkt jünger als 5 s ist (bei Signalverlust steht die Zeit, Anzeige „Kein GPS-Signal“).
-- **Schnitt:** Distanz ÷ Bewegungszeit. **Max:** höchstes Tempo bei guter Genauigkeit und < 120 km/h (GPS-Ausreißer werden ignoriert).
-- **Höhe:** `coords.altitude` (GPS-Höhe, ungefiltert, schwankt ein paar Meter).
+- **Schnitt:** Distanz ÷ Bewegungszeit. **Max:** höchstes geglättetes Tempo bei guter Genauigkeit.
+- **Höhenmeter:** Summe der Anstiege (↑). GPS-Höhe wird geglättet (gleitender Mittelwert), gezählt wird erst ab 5 m Änderung (Glättungsfaktor 0,15, per Simulation abgestimmt), Punkte mit Höhengenauigkeit > 25 m werden ignoriert. Abstieg wird intern mitgezählt (`descM`), aber nicht angezeigt.
 - **Navigation** (Knopf „Ziel“ unten links auf der Karte):
   - Ziel per **Adresssuche** (Nominatim/OSM, bevorzugt Treffer in der Nähe), per **langem Drücken auf die Karte** oder als **GPX-Route** (z. B. aus Komoot/Strava).
   - Fahrradroute vom **FOSSGIS-Routingserver** (`routing.openstreetmap.de/routed-bike`, OSRM, kostenlos, ohne Key).
@@ -53,7 +53,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 2. **Web-Apps auf iOS bekommen bei gesperrtem Bildschirm kein GPS.** Deshalb muss der Bildschirm an bleiben. Das Drücken der Seitentaste unterbricht die Aufzeichnung trotzdem.
 3. **GPS braucht HTTPS** (oder `localhost`). Einfaches `http://` über das Heimnetz funktioniert auf dem iPhone nicht.
 4. **Karte absichtlich OpenStreetMap statt Google Maps:** Google Maps JS API braucht einen API-Key mit Kreditkarte. Der Nutzer wollte ursprünglich Google Maps, OSM ist bewusst der kostenlose Ersatz (siehe offene Punkte).
-5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v8'` → `v9` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
+5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v9'` → `v10` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
 
 ---
 
@@ -113,7 +113,7 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 
 1. **Fahrzeit bei Lücken korrigieren.** Wenn der Bildschirm kurz gesperrt war und die App weiterläuft, wird die Lücke als gerade Linie verbunden (Distanz ≈ ok), aber die Fahrzeit der Lücke fehlt → Schnitt zu hoch. Idee: Beim nächsten GPS-Punkt nach einer Lücke (> 5 s seit letztem Punkt) die Zeit dazurechnen, wenn Luftlinie ÷ Zeit ein plausibles Tempo ergibt (z. B. 3–60 km/h). Außerdem die Fahrzeit auf GPS-Zeitstempeln statt auf `setInterval` aufbauen (Timer laufen im Hintergrund nicht).
 2. **Fahrtenverlauf + GPX-Export.** „Fahrt beenden“ speichert die Fahrt in eine Liste (IndexedDB oder localStorage), Export als `.gpx` (Teilen-Menü auf iOS via `navigator.share` mit Datei oder Download-Link) für Strava/Komoot. Dafür Punkte mit Zeitstempel und Höhe speichern (aktuell nur lat/lon).
-3. **Höhenmeter bergauf** (Summe der Anstiege mit Glättung/Schwelle, z. B. nur Änderungen > 3 m zählen).
+3. ~~Höhenmeter bergauf~~ (erledigt)
 4. **Beim Wiederherstellen** optional direkt fragen „Fahrt fortsetzen?“ statt nur den Knopf auf „Weiter“ zu setzen.
 5. **Google Maps (optional).** Nur falls gewünscht: Google Maps JS API mit eigenem Key (Google Cloud, Kreditkarte, Key auf die eigene Domain beschränken). Alternativ in Leaflet eine hellere Kartenvariante oder Satellit (z. B. Esri World Imagery) als umschaltbare Ebene anbieten, ist kostenlos.
 6. **Heller Modus / Sonnenlicht-Modus** (hoher Kontrast bei Sonne).
@@ -127,7 +127,7 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 - Seitentaste gedrückt / Bildschirm gesperrt → keine GPS-Punkte in der Zeit.
 - Adresssuche und Routenberechnung brauchen Netz (die Route selbst bleibt nach dem Berechnen offline nutzbar, Neuberechnung aber nicht). Keine Sprachansage.
 - Bildschirm an kostet Akku, bei langen Touren Powerbank.
-- Höhe ist rohe GPS-Höhe (±10 m typisch).
+- Höhenmeter aus GPS-Höhe (Web-Apps haben keinen Zugriff aufs Barometer), daher ungefähr ±10 % gegenüber Strava/Garmin.
 - `localStorage` wird gelöscht, wenn Website-Daten in Safari gelöscht werden. iOS kann Daten von Web-Apps, die mehrere Wochen nicht geöffnet wurden, ebenfalls löschen.
 - Kartendaten von OpenFreeMap (kostenlos, ohne Limit für normale Nutzung). Offline: Vektorkacheln, Schriften und Sprites werden gecacht, Stil/TileJSON Netz zuerst.
 

@@ -21,7 +21,7 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden}
-  body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
   [hidden]{display:none!important}
   #mapWrap{flex:1;min-height:30vh;position:relative;border-bottom:1px solid var(--line)}
   #map{position:absolute;inset:0}
@@ -29,7 +29,8 @@
   /* Nur Rückfallebene ohne WebGL: OSM-Rasterkarte grau abdunkeln */
   .rasterdark .leaflet-tile-pane{filter:grayscale(1) invert(1) brightness(1.05) contrast(.85)}
   button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-  .dash{padding:10px max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:8px}
+  /* unten nur knapp Abstand zum Home-Balken lassen, damit der Block weiter unten sitzt */
+  .dash{padding:10px max(12px,env(safe-area-inset-right)) max(6px,calc(env(safe-area-inset-bottom) - 16px)) max(12px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:8px}
   .speed{display:flex;align-items:baseline;justify-content:center;gap:8px}
   .speed .val{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:clamp(56px,18vw,96px);line-height:1;letter-spacing:-2px}
   .speed .unit{color:var(--muted);font-size:16px}
@@ -115,7 +116,7 @@
     <div class="cell"><div class="l">Zeit</div><div class="v" id="time">0:00:00</div></div>
     <div class="cell"><div class="l">Schnitt</div><div class="v" id="avg">0.0 <small>km/h</small></div></div>
     <div class="cell"><div class="l">Max</div><div class="v" id="max">0.0 <small>km/h</small></div></div>
-    <div class="cell"><div class="l">Höhe</div><div class="v" id="alt">– <small>m</small></div></div>
+    <div class="cell"><div class="l">Höhenmeter</div><div class="v" id="alt">↑0 <small>m</small></div></div>
     <div class="cell"><div class="l">Uhrzeit</div><div class="v" id="clock">--:--</div></div>
   </div>
   <div class="btns">
@@ -190,6 +191,9 @@ let watchId = null, running = false, follow = true;
 let last = null, distM = 0, maxKmh = 0, movingMs = 0, lastTick = null;
 let lastFixAt = 0;      // Empfangszeit des letzten GPS-Punkts (für Fahrzeit bei Signalverlust)
 let newSeg = true;      // nach Start/Weiter: nächster guter Punkt beginnt einen neuen Abschnitt
+let lastGood = null;    // letzter Punkt der gefahrenen Strecke (Distanz wird ab hier gemessen)
+let spdHist = [];       // letzte Tempo-Rohwerte, Median gegen Ausreißer
+let climbM = 0, descM = 0, altRef = null, altSmooth = null;  // Höhenmeter bergauf/bergab
 let wakeLock = null;
 
 const $ = id => document.getElementById(id);
@@ -210,35 +214,62 @@ function render(kmh){
   const avg = movingMs > 0 ? (distM/1000) / (movingMs/3600000) : 0;
   $('avg').innerHTML = avg.toFixed(1) + ' <small>km/h</small>';
   $('time').textContent = fmtTime(movingMs);
+  $('alt').innerHTML = '↑' + Math.round(climbM) + ' <small>m</small>';
+}
+
+// Tempo-Rohwert: GPS-Tempo (Doppler, zuverlässig) bevorzugen; Strecke/Zeit nur zwischen zwei genauen Punkten
+// mit mindestens 1 s Abstand – sonst erzeugen GPS-Sprünge Werte wie 150 km/h
+function rawSpeed(c, prev, pt){
+  if (c.accuracy > 50) return null;
+  if (c.speed != null && isFinite(c.speed) && c.speed >= 0) return c.speed * 3.6;
+  if (!prev) return null;
+  const dt = (pt.t - prev.t) / 1000;
+  if (dt < 1 || c.accuracy > 20 || prev.acc > 20) return null;
+  return haversine(prev, pt) / dt * 3.6;
+}
+// Geglättetes Tempo: Median der letzten 3 plausiblen Werte – ein einzelner Ausreißer kommt nie durch
+function smoothSpeed(raw){
+  if (raw != null && raw <= 90) { spdHist.push(raw); if (spdHist.length > 3) spdHist.shift(); }
+  if (!spdHist.length) return 0;
+  const s = [...spdHist].sort((a, b) => a - b);
+  return s.length === 2 ? Math.min(s[0], s[1]) : s[Math.floor(s.length / 2)];
+}
+
+// Höhenmeter: GPS-Höhe glätten und nur Änderungen ab 5 m zählen (GPS-Höhe schwankt sonst ständig um ein paar Meter)
+function updateAlt(c){
+  if (c.altitude == null || !isFinite(c.altitude)) return;
+  if (c.altitudeAccuracy != null && c.altitudeAccuracy > 25) return;
+  altSmooth = altSmooth == null ? c.altitude : altSmooth + 0.15 * (c.altitude - altSmooth);
+  if (!running || altRef == null) { altRef = altSmooth; return; }   // in der Pause nichts zählen
+  const diff = altSmooth - altRef;
+  if (diff >= 5) { climbM += diff; altRef = altSmooth; }
+  else if (diff <= -5) { descM -= diff; altRef = altSmooth; }
 }
 
 function onPos(p){
   const c = p.coords, now = p.timestamp;
-  const pt = {lat:c.latitude, lon:c.longitude, t:now};
+  const pt = {lat:c.latitude, lon:c.longitude, t:now, acc:c.accuracy};
   lastFixAt = Date.now();
   $('dot').classList.add('on');
   $('status').textContent = `GPS ±${Math.round(c.accuracy)} m`;
-  if (c.altitude != null) $('alt').innerHTML = Math.round(c.altitude) + ' <small>m</small>';
+  updateAlt(c);
 
   me.setLatLng([pt.lat, pt.lon]); if (!map.hasLayer(me)) me.addTo(map);
   if (follow) map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 16));
 
-  let kmh = 0;
-  if (last) {
-    const d = haversine(last, pt), dt = (now - last.t)/1000;
-    // Speed: GPS-Wert bevorzugen, sonst aus Strecke/Zeit
-    kmh = (c.speed != null && !isNaN(c.speed)) ? c.speed*3.6 : (dt > 0 ? d/dt*3.6 : 0);
-    if (running && newSeg) {
+  let kmh = smoothSpeed(rawSpeed(c, last, pt));
+  if (kmh < 1.5) kmh = 0;
+  if (running && c.accuracy < 30) {
+    if (newSeg || !lastGood) {
       // Erster Punkt nach Start/Weiter: Strecke seit der Pause nicht mitzählen
-      if (c.accuracy < 30) { addPoint(pt, true); newSeg = false; }
-    } else if (running && c.accuracy < 30 && d > 2 && kmh < 120) {
-      // Rauschen filtern: ungenaue Fixes, Stillstand und Sprünge ignorieren
-      distM += d;
-      addPoint(pt);
+      addPoint(pt, true); newSeg = false; lastGood = pt;
+    } else {
+      // Distanz ab dem letzten Streckenpunkt: Stillstand-Rauschen (< 3 m) und Sprünge (> 90 km/h) ignorieren
+      const d = haversine(lastGood, pt), dt = (pt.t - lastGood.t) / 1000;
+      if (d > 3 && dt > 0 && d / dt * 3.6 < 90) { distM += d; addPoint(pt); lastGood = pt; }
     }
-    if (kmh < 1.5) kmh = 0;
-    if (running && kmh > maxKmh && kmh < 120 && c.accuracy < 30) maxKmh = kmh;
-  } else if (running && c.accuracy < 30) { addPoint(pt, true); newSeg = false; }
+    if (kmh > maxKmh) maxKmh = kmh;
+  }
   last = pt;
   window._kmh = kmh;
   render(kmh);
@@ -250,7 +281,7 @@ function onPos(p){
 function save(){
   try {
     localStorage.setItem('ride', JSON.stringify({
-      distM, maxKmh, movingMs, running,
+      distM, maxKmh, movingMs, running, climbM, descM,
       track: track.getLatLngs().map(s => s.map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6)]))
     }));
   } catch(_) {}
@@ -260,6 +291,7 @@ function restore(){
     const r = JSON.parse(localStorage.getItem('ride') || 'null');
     if (!r) return;
     distM = r.distM || 0; maxKmh = r.maxKmh || 0; movingMs = r.movingMs || 0;
+    climbM = r.climbM || 0; descM = r.descM || 0;
     let segs = r.track || [];
     if (segs.length && typeof segs[0][0] === 'number') segs = [segs];  // altes Format: eine flache Liste
     track.setLatLngs(segs.length ? segs : [[]]);
@@ -324,7 +356,7 @@ setInterval(() => {
 
 $('startBtn').onclick = () => {
   running = !running;
-  if (running) newSeg = true;
+  if (running) { newSeg = true; spdHist = []; }
   startGps();
   keepAwake(running);
   $('startBtn').textContent = running ? 'Pause' : 'Weiter';
@@ -335,6 +367,7 @@ $('centerBtn').onclick = () => { follow = true; if (last) map.setView([last.lat,
 $('resetBtn').onclick = () => {
   if (!confirm('Fahrt zurücksetzen?')) return;
   distM = 0; maxKmh = 0; movingMs = 0; track.setLatLngs([[]]); newSeg = true;
+  climbM = 0; descM = 0; altRef = null; lastGood = null; spdHist = [];
   running = false; keepAwake(false);
   $('startBtn').textContent = 'Start'; $('startBtn').classList.remove('pause');
   render(0);
