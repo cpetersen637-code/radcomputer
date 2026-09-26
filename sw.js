@@ -1,6 +1,6 @@
 // Offline-Cache: App-Dateien + zuletzt geladene Kartenkacheln
-const APP = 'radcomputer-v2';
-const TILES = 'radcomputer-tiles';
+const APP = 'radcomputer-v3';
+const TILES = 'radcomputer-tiles-osm';  // neuer Name: alte CARTO-Kacheln ("API key required") werden gelöscht
 const CORE = [
   './', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './keepawake.mp4', './keepawake.webm',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
@@ -22,7 +22,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
 
   // Kartenkacheln: erst Cache, sonst Netz und merken (max. ~2000 Kacheln)
-  if (url.includes('basemaps.cartocdn.com')) {
+  if (url.includes('tile.openstreetmap.org')) {
     e.respondWith(caches.open(TILES).then(async c => {
       const hit = await c.match(e.request);
       if (hit) return hit;

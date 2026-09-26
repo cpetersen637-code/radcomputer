@@ -23,11 +23,11 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 
 ## Funktionen (Stand jetzt)
 
-- **Karte:** Leaflet 1.9.4 (via unpkg-CDN) mit dunklen Kacheln von CARTO (OpenStreetMap-Daten). Folgt der Position. Wer die Karte verschiebt, schaltet das Folgen ab, „Zentrieren“ schaltet es wieder ein.
+- **Karte:** Leaflet 1.9.4 (via unpkg-CDN) mit den Standard-Kacheln von OpenStreetMap, per CSS-Filter abgedunkelt (CARTO verlangt seit 2026 einen API-Key, deren Kacheln zeigten nur noch „API key required“). Folgt der Position. Wer die Karte verschiebt, schaltet das Folgen ab, „Zentrieren“ schaltet es wieder ein.
 - **Tacho:** Nimmt `coords.speed` vom GPS, sonst Strecke ÷ Zeit. Unter 1,5 km/h wird 0 angezeigt.
-- **Distanz:** Haversine zwischen GPS-Punkten. Rauschfilter: Punkt zählt nur bei Genauigkeit < 30 m, Abstand > 2 m und < 120 km/h.
-- **Fahrzeit:** Zählt nur, wenn Tempo > 0 (echte Bewegungszeit, keine Standzeit).
-- **Schnitt:** Distanz ÷ Bewegungszeit. **Max:** höchstes Tempo bei guter Genauigkeit.
+- **Distanz:** Haversine zwischen GPS-Punkten. Rauschfilter: Punkt zählt nur bei Genauigkeit < 30 m, Abstand > 2 m und < 120 km/h. Nach Start/Weiter beginnt ein neuer Streckenabschnitt, die Strecke während der Pause zählt nicht.
+- **Fahrzeit:** Zählt nur, wenn Tempo > 0 und der letzte GPS-Punkt jünger als 5 s ist (bei Signalverlust steht die Zeit, Anzeige „Kein GPS-Signal“).
+- **Schnitt:** Distanz ÷ Bewegungszeit. **Max:** höchstes Tempo bei guter Genauigkeit und < 120 km/h (GPS-Ausreißer werden ignoriert).
 - **Höhe:** `coords.altitude` (GPS-Höhe, ungefiltert, schwankt ein paar Meter).
 - **Start / Pause / Weiter / Reset** (Reset mit Sicherheitsabfrage).
 - **Fahrt wird gesichert** in `localStorage` (Schlüssel `ride`): bei jedem GPS-Punkt, alle 5 s während der Fahrt und bei Start/Pause/Reset. Beim Öffnen wird sie wiederhergestellt, der Knopf zeigt dann „Weiter“.
@@ -46,7 +46,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 2. **Web-Apps auf iOS bekommen bei gesperrtem Bildschirm kein GPS.** Deshalb muss der Bildschirm an bleiben. Das Drücken der Seitentaste unterbricht die Aufzeichnung trotzdem.
 3. **GPS braucht HTTPS** (oder `localhost`). Einfaches `http://` über das Heimnetz funktioniert auf dem iPhone nicht.
 4. **Karte absichtlich OpenStreetMap statt Google Maps:** Google Maps JS API braucht einen API-Key mit Kreditkarte. Der Nutzer wollte ursprünglich Google Maps, OSM ist bewusst der kostenlose Ersatz (siehe offene Punkte).
-5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v2'` → `v3` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
+5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v3'` → `v4` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
 
 ---
 
@@ -121,14 +121,14 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 - Bildschirm an kostet Akku, bei langen Touren Powerbank.
 - Höhe ist rohe GPS-Höhe (±10 m typisch).
 - `localStorage` wird gelöscht, wenn Website-Daten in Safari gelöscht werden. iOS kann Daten von Web-Apps, die mehrere Wochen nicht geöffnet wurden, ebenfalls löschen.
-- Kartenkacheln von CARTO: für private Nutzung kostenlos, bei starker Nutzung gelten deren Bedingungen.
+- Kartenkacheln von openstreetmap.org: kostenlos für geringe Nutzung, es gilt die Tile Usage Policy (osm.wiki/Tile_usage_policy). Für eine private App unproblematisch.
 
 ---
 
 ## Technische Notizen
 
 - Keine Build-Tools, kein npm nötig. Einfach Dateien bearbeiten.
-- Zentrale Zustandsvariablen in `index.html`: `running`, `distM`, `maxKmh`, `movingMs`, `last`, `track` (Leaflet-Polyline).
+- Zentrale Zustandsvariablen in `index.html`: `running`, `distM`, `maxKmh`, `movingMs`, `last`, `track` (Leaflet-Polyline mit Abschnitten, gespeichert als Liste von Abschnitten), `newSeg`, `lastFixAt`.
 - Wichtige Funktionen: `onPos` (GPS-Verarbeitung), `render` (Anzeige), `save`/`restore` (localStorage), `keepAwake` (Wake Lock + Video).
 - Farben als CSS-Variablen in `:root` (`--accent` grün `#3ddc97`, `--warn` orange für Pause).
 - Getestet: Headless Chromium mit simuliertem GPS: keine JS-Fehler, Start/Pause, Speichern, Keep-Awake-Video läuft. **Nicht** getestet: echtes iPhone (Nutzer testet selbst).

@@ -23,6 +23,8 @@
   body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
   #map{flex:1;min-height:30vh;border-bottom:1px solid var(--line)}
   .leaflet-container{background:#1b2027}
+  /* OSM-Standardkarte per Filter abdunkeln (Strecke/Marker liegen in anderen Ebenen und bleiben farbig) */
+  .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)}
   button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   .dash{padding:14px max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:12px}
   .speed{display:flex;align-items:baseline;justify-content:center;gap:8px}
@@ -69,17 +71,27 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// ---- Karte (OpenStreetMap, kostenlos, kein API-Key) ----
+// ---- Karte (OpenStreetMap, kostenlos, kein API-Key; CARTO verlangt inzwischen einen Key) ----
 const map = L.map('map', {zoomControl:false, attributionControl:true}).setView([51.16, 10.45], 6);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO'
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende'
 }).addTo(map);
-const track = L.polyline([], {color:'#3ddc97', weight:5, opacity:.9}).addTo(map);
+// Strecke in Abschnitten: nach jeder Pause beginnt ein neuer (keine gerade Linie über die Pause)
+const track = L.polyline([[]], {color:'#3ddc97', weight:5, opacity:.9}).addTo(map);
 const me = L.circleMarker([0,0], {radius:8, color:'#fff', weight:3, fillColor:'#3ddc97', fillOpacity:1});
+function addPoint(pt, newSeg){
+  const segs = track.getLatLngs();
+  let seg = segs[segs.length-1];
+  if (newSeg && seg.length) { seg = []; segs.push(seg); }
+  track.addLatLng([pt.lat, pt.lon], seg);
+}
+const trackPoints = () => track.getLatLngs().reduce((n, s) => n + s.length, 0);
 
 // ---- Zustand ----
 let watchId = null, running = false, follow = true;
 let last = null, distM = 0, maxKmh = 0, movingMs = 0, lastTick = null;
+let lastFixAt = 0;      // Empfangszeit des letzten GPS-Punkts (für Fahrzeit bei Signalverlust)
+let newSeg = true;      // nach Start/Weiter: nächster guter Punkt beginnt einen neuen Abschnitt
 let wakeLock = null;
 
 const $ = id => document.getElementById(id);
@@ -105,6 +117,7 @@ function render(kmh){
 function onPos(p){
   const c = p.coords, now = p.timestamp;
   const pt = {lat:c.latitude, lon:c.longitude, t:now};
+  lastFixAt = Date.now();
   $('dot').classList.add('on');
   $('status').textContent = `GPS ±${Math.round(c.accuracy)} m`;
   if (c.altitude != null) $('alt').innerHTML = Math.round(c.altitude) + ' <small>m</small>';
@@ -117,14 +130,17 @@ function onPos(p){
     const d = haversine(last, pt), dt = (now - last.t)/1000;
     // Speed: GPS-Wert bevorzugen, sonst aus Strecke/Zeit
     kmh = (c.speed != null && !isNaN(c.speed)) ? c.speed*3.6 : (dt > 0 ? d/dt*3.6 : 0);
-    // Rauschen filtern: ungenaue Fixes und Stillstand ignorieren
-    if (running && c.accuracy < 30 && d > 2 && kmh < 120) {
+    if (running && newSeg) {
+      // Erster Punkt nach Start/Weiter: Strecke seit der Pause nicht mitzählen
+      if (c.accuracy < 30) { addPoint(pt, true); newSeg = false; }
+    } else if (running && c.accuracy < 30 && d > 2 && kmh < 120) {
+      // Rauschen filtern: ungenaue Fixes, Stillstand und Sprünge ignorieren
       distM += d;
-      track.addLatLng([pt.lat, pt.lon]);
+      addPoint(pt);
     }
     if (kmh < 1.5) kmh = 0;
-    if (running && kmh > maxKmh && c.accuracy < 30) maxKmh = kmh;
-  } else if (running) track.addLatLng([pt.lat, pt.lon]);
+    if (running && kmh > maxKmh && kmh < 120 && c.accuracy < 30) maxKmh = kmh;
+  } else if (running && c.accuracy < 30) { addPoint(pt, true); newSeg = false; }
   last = pt;
   window._kmh = kmh;
   render(kmh);
@@ -136,7 +152,7 @@ function save(){
   try {
     localStorage.setItem('ride', JSON.stringify({
       distM, maxKmh, movingMs, running,
-      track: track.getLatLngs().map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6)])
+      track: track.getLatLngs().map(s => s.map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6)]))
     }));
   } catch(_) {}
 }
@@ -145,8 +161,10 @@ function restore(){
     const r = JSON.parse(localStorage.getItem('ride') || 'null');
     if (!r) return;
     distM = r.distM || 0; maxKmh = r.maxKmh || 0; movingMs = r.movingMs || 0;
-    track.setLatLngs(r.track || []);
-    if (r.track && r.track.length) map.fitBounds(track.getBounds(), {padding:[20,20]});
+    let segs = r.track || [];
+    if (segs.length && typeof segs[0][0] === 'number') segs = [segs];  // altes Format: eine flache Liste
+    track.setLatLngs(segs.length ? segs : [[]]);
+    if (trackPoints()) map.fitBounds(track.getBounds(), {padding:[20,20]});
     if (movingMs > 0) { $('startBtn').textContent = 'Weiter'; }
     render(0);
   } catch(_) {}
@@ -191,10 +209,15 @@ document.addEventListener('visibilitychange', () => { if (running && document.vi
 // Video läuft ab und zu aus (z. B. nach Anruf) – wieder anwerfen
 setInterval(() => { if (running && awakeVideo.paused) awakeVideo.play().catch(() => {}); }, 10000);
 
-// Fahrzeit nur zählen, wenn man sich bewegt
+// Fahrzeit nur zählen, wenn man sich bewegt und das GPS noch frische Punkte liefert
 setInterval(() => {
   const now = Date.now();
-  if (running && lastTick && (window._kmh || 0) > 0) movingMs += now - lastTick;
+  const fresh = now - lastFixAt < 5000;
+  if (running && !fresh && lastFixAt) {
+    window._kmh = 0; $('speed').textContent = '0.0';
+    $('dot').classList.remove('on'); $('status').textContent = 'Kein GPS-Signal';
+  }
+  if (running && lastTick && fresh && (window._kmh || 0) > 0) movingMs += now - lastTick;
   lastTick = now;
   $('clock').textContent = new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
   if (running) $('time').textContent = fmtTime(movingMs);
@@ -202,6 +225,7 @@ setInterval(() => {
 
 $('startBtn').onclick = () => {
   running = !running;
+  if (running) newSeg = true;
   startGps();
   keepAwake(running);
   $('startBtn').textContent = running ? 'Pause' : 'Weiter';
@@ -211,7 +235,7 @@ $('startBtn').onclick = () => {
 $('centerBtn').onclick = () => { follow = true; if (last) map.setView([last.lat, last.lon], 16); };
 $('resetBtn').onclick = () => {
   if (!confirm('Fahrt zurücksetzen?')) return;
-  distM = 0; maxKmh = 0; movingMs = 0; track.setLatLngs([]);
+  distM = 0; maxKmh = 0; movingMs = 0; track.setLatLngs([[]]); newSeg = true;
   running = false; keepAwake(false);
   $('startBtn').textContent = 'Start'; $('startBtn').classList.remove('pause');
   render(0);
