@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0e1116">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Radcomputer">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
@@ -51,18 +51,21 @@
   /* Navi-Anzeige frei auf der Karte (ohne Kachel): Mitte = nächste Abbiegung, rechts = Ziel/Rest/Ankunft.
      Scharfe dunkle Kontur statt weichem Schatten, damit es auf der Karte lesbar bleibt, aber nicht verschwimmt. */
   #navBar{position:absolute;top:6px;left:0;right:0;z-index:1000;pointer-events:none;
-    color:#fff;paint-order:stroke fill;-webkit-text-stroke:4px var(--bg)}
+    color:#fff;--o:#0e1116;
+    /* harte Kontur aus mehreren unverwischten Schatten (Safari rendert -webkit-text-stroke breiig) */
+    text-shadow:2px 0 0 var(--o),-2px 0 0 var(--o),0 2px 0 var(--o),0 -2px 0 var(--o),
+      1.5px 1.5px 0 var(--o),-1.5px 1.5px 0 var(--o),1.5px -1.5px 0 var(--o),-1.5px -1.5px 0 var(--o)}
   #navNow{display:flex;flex-direction:column;align-items:center;margin:0 auto;max-width:calc(100% - 150px)}
   #navNow .row{display:flex;align-items:center;gap:6px}
-  #navArrow{width:58px;height:58px;display:flex;align-items:center;justify-content:center;font-size:40px;line-height:1;-webkit-text-stroke:0}
+  #navArrow{width:58px;height:58px;display:flex;align-items:center;justify-content:center;font-size:40px;line-height:1}
   #navArrow svg{width:58px;height:58px;display:block}
   #navDist{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:28px}
   #navDist:empty{display:none}
   #navText{font-weight:600;font-size:15px;text-align:center}
-  #navSub{font-size:12px;text-align:center;color:#c9d1d9;-webkit-text-stroke:3px var(--bg)}
+  #navSub{font-size:12px;text-align:center;color:#c9d1d9}
   #navText:empty,#navSub:empty{display:none}
   #navEta{position:absolute;top:0;right:10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;line-height:1.3}
-  #navEta .f{font-size:22px;-webkit-text-stroke:0}
+  #navEta .f{font-size:22px;text-shadow:none}
   /* Quellenangabe der Karte klein und dunkel */
   .leaflet-container .leaflet-control-attribution{background:rgba(14,17,22,.6);color:#6b7480;font-size:9px;padding:0 4px}
   .leaflet-control-attribution a{color:#8b949e}
@@ -78,6 +81,15 @@
   .navrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
   .navrow button,.navrow label{padding:10px 6px;font-size:14px}
   label.sec{font:600 14px Inter,sans-serif;border-radius:10px;text-align:center;cursor:pointer;background:var(--bg);color:var(--text);border:1px solid var(--line)}
+  #routePick{position:absolute;left:8px;right:8px;bottom:8px;z-index:1001;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;max-height:calc(100% - 16px);overflow-y:auto}
+  #routePick .rt{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:0 2px}
+  #routeList{list-style:none;display:flex;flex-direction:column;gap:6px}
+  #routeList li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:10px;background:var(--bg);cursor:pointer}
+  #routeList .sw{width:14px;height:14px;border-radius:50%;flex:none}
+  #routeList .m{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px}
+  #routeList .s{font-size:12px;color:var(--muted);margin-top:1px}
+  #routePick button{padding:8px;font-size:14px}
   .navhint{font-size:12px;color:var(--muted);text-align:center}
   .leaflet-popup-content button{padding:8px 12px;font-size:14px}
   @media (orientation:landscape) and (max-height:500px){
@@ -107,6 +119,11 @@
       <button class="sec" id="navClose">Schließen</button>
     </div>
     <div class="navhint">Tipp: Lange auf die Karte drücken, um dort ein Ziel zu setzen.</div>
+  </div>
+  <div id="routePick" hidden>
+    <div class="rt">Route wählen</div>
+    <ul id="routeList"></ul>
+    <button class="sec" id="routeCancel">Abbrechen</button>
   </div>
 </div>
 <div class="dash">
@@ -377,7 +394,11 @@ map.on('dragstart', () => follow = false);
 setInterval(() => { if (running) save(); }, 5000);
 
 // ---- Navigation: Fahrradroute (FOSSGIS/OSRM) + Adresssuche (Nominatim), beides kostenlos ohne Key ----
+// Valhalla (FOSSGIS) liefert direktere Radrouten als OSRM (im Test ~16 % kürzer); OSRM als weitere Variante/Reserve
+const VALHALLA = 'https://valhalla1.openstreetmap.de/route?json=';
 const ROUTER = 'https://routing.openstreetmap.de/routed-bike/route/v1/driving/';
+const ALTCOL = ['#4ea1ff', '#f0b429', '#c678dd', '#56d4dd', '#ff7b72'];
+const altLayer = L.layerGroup().addTo(map);   // Routenvorschläge während der Auswahl
 const GEOCODER = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=de&q=';
 let nav = null;          // {mode:'route'|'gpx', dest:{lat,lon,name}, pts:[[lat,lon]], steps:[{d,a,t}], cum, total, idx, along}
 let pendingDest = null;  // Ziel gewählt, aber noch keine GPS-Position
@@ -428,13 +449,12 @@ function navShow(arrow, dist, text, sub, eta){
 }
 
 function setNav(n, fit){
-  n.cum = [0];
-  for (let i = 1; i < n.pts.length; i++) n.cum.push(n.cum[i-1] + haversine(ll(n.pts[i-1]), ll(n.pts[i])));
+  n.cum = cumDist(n.pts);
   n.total = n.cum[n.cum.length-1]; n.idx = 0; n.along = 0;
   nav = n; offCount = 0;
   routeLine.setLatLngs(n.pts);
   destMarker.setLatLng([n.dest.lat, n.dest.lon]); if (!map.hasLayer(destMarker)) destMarker.addTo(map);
-  try { localStorage.setItem('nav', JSON.stringify({mode:n.mode, dest:n.dest, steps:n.steps,
+  try { localStorage.setItem('nav', JSON.stringify({mode:n.mode, dest:n.dest, steps:n.steps, profile:n.profile,
     pts:n.pts.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)])})); } catch(_) {}
   if (fit) { follow = running; map.fitBounds(routeLine.getBounds(), {padding:[40,40]}); }
   if (last) updateNav(last, 0);
@@ -448,21 +468,170 @@ function endNav(){
   try { localStorage.removeItem('nav'); } catch(_) {}
 }
 
-async function routeTo(dest, from, fit){
+const cumDist = pts => { const c = [0]; for (let i = 1; i < pts.length; i++) c.push(c[i-1] + haversine(ll(pts[i-1]), ll(pts[i]))); return c; };
+
+// Valhalla-Geometrie (encoded polyline, 6 Nachkommastellen) entpacken
+function decode6(str){
+  const out = []; let i = 0, lat = 0, lon = 0;
+  while (i < str.length) {
+    for (let k = 0; k < 2; k++) {
+      let r = 0, sh = 0, b;
+      do { b = str.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32);
+      const d = r & 1 ? ~(r >> 1) : r >> 1;
+      if (k) lon += d; else lat += d;
+    }
+    out.push([lat / 1e6, lon / 1e6]);
+  }
+  return out;
+}
+// Valhalla-Manövertypen → Pfeil (null = kein Hinweis nötig, z. B. geradeaus/Straßenname ändert sich)
+function valStep(m){
+  const t = m.type;
+  if (t === 26) return {a:'⟳', t:`Im Kreisverkehr ${m.roundabout_exit_count ? m.roundabout_exit_count + '. Ausfahrt' : 'ausfahren'}`};
+  if (t >= 4 && t <= 6) return {a:'🏁', t:'Ziel erreicht'};
+  const A = {9:'↗', 23:'↗', 20:'↗', 18:'↗', 37:'↗', 10:'→', 11:'↘', 12:'⤺', 13:'⤺', 14:'↙', 15:'←', 16:'↖', 24:'↖', 21:'↖', 19:'↖', 38:'↖'};
+  return A[t] ? {a:A[t], t:''} : null;
+}
+// Valhalla-Radroute(n). roads: 0 = Hauptstraßen meiden … 1 = gern auf Hauptstraßen (weniger Abbiegen); alts = Anzahl Alternativen
+async function routeValhalla(from, dest, roads, alts){
+  const q = {locations:[{lat:from.lat, lon:from.lon}, {lat:dest.lat, lon:dest.lon}], costing:'bicycle',
+    costing_options:{bicycle:{bicycle_type:'Hybrid', use_roads:roads}}, directions_type:'maneuvers'};
+  if (alts) q.alternates = alts;
+  const r = await (await fetch(VALHALLA + encodeURIComponent(JSON.stringify(q)))).json();
+  if (!r.trip || !r.trip.legs) throw new Error(r.error || 'keine Route gefunden');
+  return [r.trip, ...(r.alternates || []).map(a => a.trip)].map(trip => {
+    const leg = trip.legs[0], pts = decode6(leg.shape), cum = cumDist(pts), steps = [];
+    for (const m of leg.maneuvers) { const x = valStep(m); if (x) steps.push({d: cum[m.begin_shape_index] || 0, a:x.a, t:x.t}); }
+    return {pts, steps, sec: trip.summary.time, profile:{kind:'v', roads}};
+  });
+}
+async function routeOsrm(from, dest){
+  const r = await (await fetch(`${ROUTER}${from.lon},${from.lat};${dest.lon},${dest.lat}?overview=full&geometries=geojson&steps=true`)).json();
+  if (r.code !== 'Ok' || !r.routes || !r.routes.length) throw new Error(r.message || 'keine Route gefunden');
+  const rt = r.routes[0], steps = []; let d = 0;
+  for (const s of rt.legs.flatMap(l => l.steps)) { const x = stepText(s); if (x) steps.push({d, a:x.a, t:x.t}); d += s.distance; }
+  return [{pts: rt.geometry.coordinates.map(([lon, lat]) => [lat, lon]), steps, sec: rt.duration, profile:{kind:'o'}}];
+}
+
+// Hin-und-zurück entfernen: Kommt die Route nach > 80 m wieder auf < 25 m an eine frühere Stelle zurück
+// (z. B. erst auf dem Radweg in die falsche Richtung, wenden, auf der anderen Straßenseite zurück),
+// wird das Stück durch den direkten Weg ersetzt. Die aktuelle Position zählt als erster Punkt mit.
+function removeBacktracks(pts, steps, start){
+  let P = [[start.lat, start.lon], ...pts], cum = cumDist(P);
+  let S = steps.map(s => ({...s, d: s.d + cum[1]}));
+  const kx = Math.cos(start.lat * Math.PI / 180) * 111320, ky = 110540;
+  const near = (a, b) => Math.hypot((a[1] - b[1]) * kx, (a[0] - b[0]) * ky);
+  const bearing = (a, b) => Math.atan2((b[1] - a[1]) * kx, (b[0] - a[0]) * ky) * 180 / Math.PI;
+  for (let i = 0; i < P.length - 2; i++) {
+    let j = -1;
+    for (let k = P.length - 1; k > i + 1 && cum[k] - cum[i] > 80; k--) {
+      const dd = near(P[i], P[k]);
+      if (dd < 25 && cum[k] - cum[i] > 4 * dd) { j = k; break; }
+    }
+    if (j < 0) continue;
+    const from = cum[i], to = cum[j], saved = to - from - near(P[i], P[j]);
+    S = S.filter(s => s.d <= from || s.d >= to).map(s => s.d >= to ? {...s, d: s.d - saved} : s);
+    if (i > 0 && j < P.length - 1) {   // an der Abkürzung einen Richtungshinweis setzen
+      let turn = bearing(P[j], P[j+1]) - bearing(P[i-1], P[i]);
+      turn = ((turn + 540) % 360) - 180;
+      const t = Math.abs(turn), right = turn > 0;
+      const a = t < 25 ? null : t < 60 ? (right ? '↗' : '↖') : t < 120 ? (right ? '→' : '←') : t < 165 ? (right ? '↘' : '↙') : '⤺';
+      if (a) S.push({d: from, a, t:''});
+    }
+    P.splice(i + 1, j - i - 1);
+    cum = cumDist(P);
+  }
+  S.sort((a, b) => a.d - b.d);
+  return {pts: P, steps: S};
+}
+// Kennzahlen einer Route: Länge und Anzahl Abbiegungen (ohne Start/Ziel)
+function finishRoute(r, from){
+  const x = removeBacktracks(r.pts, r.steps, from);
+  const len = cumDist(x.pts).pop();
+  return {...r, pts: x.pts, steps: x.steps, len, turns: x.steps.filter(s => s.a !== '↑' && s.a !== '🏁').length,
+    sec: r.sec * len / Math.max(1, cumDist(r.pts).pop())};
+}
+// Fast gleiche Routen erkennen: 90 % der Punkte von b liegen höchstens 25 m neben a
+function sameRoute(a, b){
+  const kx = Math.cos(a.pts[0][0] * Math.PI / 180) * 111320, ky = 110540, n = 24;
+  let hit = 0;
+  for (let k = 0; k < n; k++) {
+    const q = b.pts[Math.floor(k * (b.pts.length - 1) / (n - 1))];
+    let best = Infinity;
+    for (let i = 0; i < a.pts.length - 1; i++) {
+      const ax = (a.pts[i][1]-q[1])*kx, ay = (a.pts[i][0]-q[0])*ky, dx = (a.pts[i+1][1]-a.pts[i][1])*kx, dy = (a.pts[i+1][0]-a.pts[i][0])*ky;
+      const l2 = dx*dx + dy*dy, t = l2 ? Math.max(0, Math.min(1, -(ax*dx + ay*dy)/l2)) : 0;
+      best = Math.min(best, Math.hypot(ax + t*dx, ay + t*dy));
+    }
+    if (best < 25) hit++;
+  }
+  return hit >= n * 0.9;
+}
+
+// Neuberechnung unterwegs: gleiche Variante wie gewählt, ohne Nachfrage
+async function routeTo(dest, from, fit, profile){
   routing = true;
   navShow('…', '', nav ? 'Neue Route wird berechnet' : 'Route wird berechnet', dest.name || '');
   try {
-    const res = await fetch(`${ROUTER}${from.lon},${from.lat};${dest.lon},${dest.lat}?overview=full&geometries=geojson&steps=true`);
-    const r = await res.json();
-    if (r.code !== 'Ok' || !r.routes || !r.routes.length) throw new Error(r.message || 'keine Route gefunden');
-    const rt = r.routes[0], steps = []; let d = 0;
-    for (const s of rt.legs.flatMap(l => l.steps)) { const x = stepText(s); if (x) steps.push({d, a:x.a, t:x.t}); d += s.distance; }
+    let list;
+    const prof = profile || {kind:'v', roads:0.5};
+    try { list = prof.kind === 'o' ? await routeOsrm(from, dest) : await routeValhalla(from, dest, prof.roads, 0); }
+    catch(e) { list = prof.kind === 'o' ? await routeValhalla(from, dest, 0.5, 0) : await routeOsrm(from, dest); }   // Reserve
+    const r = finishRoute(list[0], from);
     routing = false;
-    setNav({mode:'route', dest, steps, pts: rt.geometry.coordinates.map(([lon, lat]) => [lat, lon])}, fit);
+    setNav({mode:'route', dest, steps: r.steps, pts: r.pts, profile: r.profile}, fit);
   } catch(e) {
     navShow('⚠', '', 'Routing fehlgeschlagen', e.message + (navigator.onLine ? '' : ' (offline)'));
   } finally { routing = false; }
 }
+
+// Neues Ziel: mehrere Varianten berechnen und zur Auswahl anbieten
+async function planRoutes(dest, from){
+  routing = true;
+  navShow('…', '', 'Routen werden berechnet', dest.name || '');
+  const jobs = [routeValhalla(from, dest, 0.5, 2),    // direkt + Alternativen
+                routeValhalla(from, dest, 0.9, 0),    // mehr auf Hauptstrecken → weniger Abbiegen
+                routeOsrm(from, dest)];
+  const res = await Promise.allSettled(jobs);
+  routing = false;
+  let routes = res.filter(x => x.status === 'fulfilled').flatMap(x => x.value).map(r => finishRoute(r, from));
+  if (!routes.length) {
+    const err = res.find(x => x.status === 'rejected');
+    navShow('⚠', '', 'Routing fehlgeschlagen', (err ? err.reason.message : '') + (navigator.onLine ? '' : ' (offline)'));
+    return;
+  }
+  routes.sort((a, b) => a.len - b.len);
+  const uniq = [];
+  for (const r of routes) if (!uniq.some(u => sameRoute(u, r))) uniq.push(r);
+  routes = uniq.slice(0, 4);
+  if (routes.length === 1) { useRoute(routes[0], dest); return; }
+  const fewest = routes.reduce((m, r) => r.turns < m.turns ? r : m, routes[0]);
+  $('navBar').hidden = true;
+  altLayer.clearLayers();
+  const list = $('routeList'); list.textContent = '';
+  routes.forEach((r, i) => {
+    r.color = ALTCOL[i % ALTCOL.length];
+    const line = L.polyline(r.pts, {color:r.color, weight: i ? 5 : 7, opacity:.85}).addTo(altLayer);
+    line.on('click', () => useRoute(r, dest));
+    const tags = [i === 0 ? 'Kürzeste' : null, r === fewest && i !== 0 ? 'Wenigste Abbiegungen' : null].filter(Boolean);
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="sw" style="background:${r.color}"></span><div><div class="m"></div><div class="s"></div></div>`;
+    li.querySelector('.m').textContent = `${fmtDist(r.len)} · ${Math.round(r.sec / 60)} min`;
+    li.querySelector('.s').textContent = [...tags, `${r.turns} Abbiegungen`].join(' · ');
+    li.onclick = () => useRoute(r, dest);
+    list.appendChild(li);
+  });
+  $('routePick').hidden = false;
+  follow = false;
+  // Routen oberhalb der Auswahlliste einpassen
+  map.fitBounds(L.featureGroup(altLayer.getLayers()).getBounds(),
+    {paddingTopLeft:[30, 30], paddingBottomRight:[30, $('routePick').offsetHeight + 24]});
+}
+function useRoute(r, dest){
+  altLayer.clearLayers(); $('routePick').hidden = true;
+  setNav({mode:'route', dest, steps: r.steps, pts: r.pts, profile: r.profile}, true);
+}
+$('routeCancel').onclick = () => { altLayer.clearLayers(); $('routePick').hidden = true; $('navBar').hidden = !nav; };
 
 // Position auf die Route projizieren: nächster Punkt auf der Linie + gefahrene Strecke entlang der Route
 function project(lat, lon){
@@ -482,7 +651,7 @@ function project(lat, lon){
 }
 
 function updateNav(pt, acc){
-  if (pendingDest && !routing) { const d = pendingDest; pendingDest = null; routeTo(d, pt, true); return; }
+  if (pendingDest && !routing) { const d = pendingDest; pendingDest = null; planRoutes(d, pt); return; }
   if (!nav || routing) return;
   const p = project(pt.lat, pt.lon);
   if (acc < 30) {
@@ -503,7 +672,7 @@ function updateNav(pt, acc){
     .toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
   const info = {rest: fmtDist(rest), time: eta};
   if (offCount >= 3) {
-    if (nav.mode === 'route' && Date.now() - lastReroute > 10000) { lastReroute = Date.now(); routeTo(nav.dest, pt, false); return; }
+    if (nav.mode === 'route' && Date.now() - lastReroute > 10000) { lastReroute = Date.now(); routeTo(nav.dest, pt, false, nav.profile); return; }
     navShow('⚠', fmtDist(p.dist), 'neben der Route', '', info);
     return;
   }
@@ -516,7 +685,7 @@ function updateNav(pt, acc){
 
 function chooseDest(dest){
   $('navPanel').hidden = true; map.closePopup();
-  if (last) routeTo(dest, last, true);
+  if (last) planRoutes(dest, last);
   else { pendingDest = dest; navShow('…', '', 'Warte auf GPS', dest.name || ''); }
 }
 

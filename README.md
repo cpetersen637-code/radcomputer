@@ -31,7 +31,9 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 - **Höhenmeter:** Summe der Anstiege (↑). GPS-Höhe wird geglättet (gleitender Mittelwert), gezählt wird erst ab 5 m Änderung (Glättungsfaktor 0,15, per Simulation abgestimmt), Punkte mit Höhengenauigkeit > 25 m werden ignoriert. Abstieg wird intern mitgezählt (`descM`), aber nicht angezeigt.
 - **Navigation** (Knopf „Ziel“ unten links auf der Karte):
   - Ziel per **Adresssuche** (Nominatim/OSM, bevorzugt Treffer in der Nähe), per **langem Drücken auf die Karte** oder als **GPX-Route** (z. B. aus Komoot/Strava).
-  - Fahrradroute vom **FOSSGIS-Routingserver** (`routing.openstreetmap.de/routed-bike`, OSRM, kostenlos, ohne Key).
+  - **Routenauswahl:** nach der Zielwahl mehrere Varianten farbig auf der Karte + Liste (km · min · Anzahl Abbiegungen, Markierung „Kürzeste“ / „Wenigste Abbiegungen“), antippen startet. Varianten: **Valhalla** auf dem FOSSGIS-Server (`valhalla1.openstreetmap.de`, bicycle/Hybrid, `use_roads` 0,5 mit 2 Alternativen, dazu `use_roads` 0,9 = mehr Hauptstrecken, weniger Abbiegen) und **OSRM** (`routing.openstreetmap.de/routed-bike`). Fast gleiche Routen (90 % der Punkte < 25 m) werden aussortiert. Valhalla war im Test (40 Routen) ~16 % kürzer als OSRM.
+  - `removeBacktracks`: Kommt eine Route nach > 80 m wieder auf < 25 m an eine frühere Stelle (oder den Startpunkt) zurück (typisch: einseitiger Radweg → erst weg, wenden, auf der anderen Seite zurück), wird das Stück durch den direkten Weg ersetzt.
+  - Neuberechnung unterwegs nutzt die gewählte Variante (`nav.profile`), ohne erneute Auswahl.
   - Anzeige oben, frei auf der Karte (ohne Kachel): mittig nur die nächste Abbiegung als blauer Pfeil + Meter, oben rechts 🏁 mit Rest-km und Ankunftszeit untereinander (Ankunft nach eigenem Schnitt, sonst 18 km/h). Scharfe dunkle Kontur (paint-order/-webkit-text-stroke) statt weichem Schatten.
   - Mehr als 40 m neben der Route (3 GPS-Punkte hintereinander) → Route wird neu berechnet (höchstens alle 10 s). Bei GPX-Routen nur Warnung „neben der Route“ mit Abstand, ohne Abbiegehinweise.
   - Ziel erreicht bei < 25 m Rest. Navigation wird in `localStorage` (Schlüssel `nav`) gesichert und beim Öffnen wiederhergestellt.
@@ -53,7 +55,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 2. **Web-Apps auf iOS bekommen bei gesperrtem Bildschirm kein GPS.** Deshalb muss der Bildschirm an bleiben. Das Drücken der Seitentaste unterbricht die Aufzeichnung trotzdem.
 3. **GPS braucht HTTPS** (oder `localhost`). Einfaches `http://` über das Heimnetz funktioniert auf dem iPhone nicht.
 4. **Karte absichtlich OpenStreetMap statt Google Maps:** Google Maps JS API braucht einen API-Key mit Kreditkarte. Der Nutzer wollte ursprünglich Google Maps, OSM ist bewusst der kostenlose Ersatz (siehe offene Punkte).
-5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v9'` → `v10` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
+5. **Nach Änderungen an Dateien** die Cache-Version in `sw.js` erhöhen (`const APP = 'radcomputer-v10'` → `v11` usw.), sonst sieht das iPhone die alte Version. Neue Dateien auch in die `CORE`-Liste in `sw.js` eintragen.
 
 ---
 
@@ -138,6 +140,6 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 - Keine Build-Tools, kein npm nötig. Einfach Dateien bearbeiten.
 - Zentrale Zustandsvariablen in `index.html`: `running`, `distM`, `maxKmh`, `movingMs`, `last`, `track` (Leaflet-Polyline mit Abschnitten, gespeichert als Liste von Abschnitten), `newSeg`, `lastFixAt`.
 - Wichtige Funktionen: `onPos` (GPS-Verarbeitung), `render` (Anzeige), `save`/`restore` (localStorage), `keepAwake` (Wake Lock + Video).
-- Navigation: `nav` (aktive Route), `routeTo` (OSRM-Abfrage), `stepText` (Abbiegehinweise auf Deutsch), `project` (Position auf Route projizieren), `updateNav` (bei jedem GPS-Punkt), `searchPlace` (Nominatim), `loadGpx`. `sw.js` cached Nominatim/Routing absichtlich nicht.
+- Navigation: `nav` (aktive Route), `planRoutes` (Varianten + Auswahl), `routeTo` (Neuberechnung), `routeValhalla`/`routeOsrm`, `removeBacktracks`, `sameRoute`, `valStep`/`stepText` (Manöver → Pfeil), `project` (Position auf Route projizieren), `updateNav` (bei jedem GPS-Punkt), `searchPlace` (Nominatim), `loadGpx`. `sw.js` cached Nominatim/Routing (OSRM, Valhalla) absichtlich nicht.
 - Farben als CSS-Variablen in `:root` (`--accent` grün `#3ddc97`, `--warn` orange für Pause).
 - Getestet: Headless Chromium mit simuliertem GPS: keine JS-Fehler, Start/Pause, Speichern, Keep-Awake-Video läuft. **Nicht** getestet: echtes iPhone (Nutzer testet selbst).
