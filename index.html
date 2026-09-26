@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e1116">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Radcomputer">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<title>Radcomputer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --line:#262d36;
+    --text:#e6edf3; --muted:#8b949e; --accent:#3ddc97; --warn:#f0883e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden}
+  body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  #map{flex:1;min-height:30vh;border-bottom:1px solid var(--line)}
+  .leaflet-container{background:#1b2027}
+  button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  .dash{padding:14px max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:12px}
+  .speed{display:flex;align-items:baseline;justify-content:center;gap:8px}
+  .speed .val{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:clamp(72px,24vw,120px);line-height:1;letter-spacing:-2px}
+  .speed .unit{color:var(--muted);font-size:18px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .cell{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
+  .cell .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .cell .v{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:500;margin-top:4px}
+  .cell .v small{font-size:12px;color:var(--muted);font-family:Inter,sans-serif}
+  .btns{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}
+  button{font:600 16px Inter,sans-serif;border:0;border-radius:12px;padding:16px 8px;cursor:pointer;color:var(--bg);background:var(--accent)}
+  button.sec{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+  button.pause{background:var(--warn)}
+  .status{font-size:12px;color:var(--muted);text-align:center;min-height:16px}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:middle}
+  .dot.on{background:var(--accent)}
+  @media (orientation:landscape) and (max-height:500px){
+    body{flex-direction:row}
+    #map{border-bottom:0;border-right:1px solid var(--line)}
+    .dash{width:46%;overflow-y:auto}
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="dash">
+  <div class="speed"><span class="val" id="speed">0.0</span><span class="unit">km/h</span></div>
+  <div class="grid">
+    <div class="cell"><div class="l">Distanz</div><div class="v" id="dist">0.00 <small>km</small></div></div>
+    <div class="cell"><div class="l">Zeit</div><div class="v" id="time">0:00:00</div></div>
+    <div class="cell"><div class="l">Schnitt</div><div class="v" id="avg">0.0 <small>km/h</small></div></div>
+    <div class="cell"><div class="l">Max</div><div class="v" id="max">0.0 <small>km/h</small></div></div>
+    <div class="cell"><div class="l">Höhe</div><div class="v" id="alt">– <small>m</small></div></div>
+    <div class="cell"><div class="l">Uhrzeit</div><div class="v" id="clock">--:--</div></div>
+  </div>
+  <div class="btns">
+    <button id="startBtn">Start</button>
+    <button class="sec" id="centerBtn">Zentrieren</button>
+    <button class="sec" id="resetBtn">Reset</button>
+  </div>
+  <div class="status"><span class="dot" id="dot"></span><span id="status">Bereit</span></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ---- Karte (OpenStreetMap, kostenlos, kein API-Key) ----
+const map = L.map('map', {zoomControl:false, attributionControl:true}).setView([51.16, 10.45], 6);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO'
+}).addTo(map);
+const track = L.polyline([], {color:'#3ddc97', weight:5, opacity:.9}).addTo(map);
+const me = L.circleMarker([0,0], {radius:8, color:'#fff', weight:3, fillColor:'#3ddc97', fillOpacity:1});
+
+// ---- Zustand ----
+let watchId = null, running = false, follow = true;
+let last = null, distM = 0, maxKmh = 0, movingMs = 0, lastTick = null;
+let wakeLock = null;
+
+const $ = id => document.getElementById(id);
+const fmtTime = ms => { const s = Math.floor(ms/1000);
+  return `${Math.floor(s/3600)}:${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
+
+function haversine(a, b){
+  const R = 6371000, r = Math.PI/180;
+  const dLat = (b.lat-a.lat)*r, dLon = (b.lon-a.lon)*r;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+
+function render(kmh){
+  $('speed').textContent = kmh.toFixed(1);
+  $('dist').innerHTML = (distM/1000).toFixed(2) + ' <small>km</small>';
+  $('max').innerHTML = maxKmh.toFixed(1) + ' <small>km/h</small>';
+  const avg = movingMs > 0 ? (distM/1000) / (movingMs/3600000) : 0;
+  $('avg').innerHTML = avg.toFixed(1) + ' <small>km/h</small>';
+  $('time').textContent = fmtTime(movingMs);
+}
+
+function onPos(p){
+  const c = p.coords, now = p.timestamp;
+  const pt = {lat:c.latitude, lon:c.longitude, t:now};
+  $('dot').classList.add('on');
+  $('status').textContent = `GPS ±${Math.round(c.accuracy)} m`;
+  if (c.altitude != null) $('alt').innerHTML = Math.round(c.altitude) + ' <small>m</small>';
+
+  me.setLatLng([pt.lat, pt.lon]); if (!map.hasLayer(me)) me.addTo(map);
+  if (follow) map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 16));
+
+  let kmh = 0;
+  if (last) {
+    const d = haversine(last, pt), dt = (now - last.t)/1000;
+    // Speed: GPS-Wert bevorzugen, sonst aus Strecke/Zeit
+    kmh = (c.speed != null && !isNaN(c.speed)) ? c.speed*3.6 : (dt > 0 ? d/dt*3.6 : 0);
+    // Rauschen filtern: ungenaue Fixes und Stillstand ignorieren
+    if (running && c.accuracy < 30 && d > 2 && kmh < 120) {
+      distM += d;
+      track.addLatLng([pt.lat, pt.lon]);
+    }
+    if (kmh < 1.5) kmh = 0;
+    if (running && kmh > maxKmh && c.accuracy < 30) maxKmh = kmh;
+  } else if (running) track.addLatLng([pt.lat, pt.lon]);
+  last = pt;
+  window._kmh = kmh;
+  render(kmh);
+  save();
+}
+
+// ---- Fahrt sichern (iOS beendet Web-Apps im Hintergrund gern) ----
+function save(){
+  try {
+    localStorage.setItem('ride', JSON.stringify({
+      distM, maxKmh, movingMs, running,
+      track: track.getLatLngs().map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6)])
+    }));
+  } catch(_) {}
+}
+function restore(){
+  try {
+    const r = JSON.parse(localStorage.getItem('ride') || 'null');
+    if (!r) return;
+    distM = r.distM || 0; maxKmh = r.maxKmh || 0; movingMs = r.movingMs || 0;
+    track.setLatLngs(r.track || []);
+    if (r.track && r.track.length) map.fitBounds(track.getBounds(), {padding:[20,20]});
+    if (movingMs > 0) { $('startBtn').textContent = 'Weiter'; }
+    render(0);
+  } catch(_) {}
+}
+
+function onErr(e){
+  $('dot').classList.remove('on');
+  $('status').textContent = e.code === 1 ? 'Standortzugriff verweigert' :
+    'GPS-Fehler: ' + e.message + (location.protocol !== 'https:' && location.hostname !== 'localhost' ? ' (HTTPS nötig)' : '');
+}
+
+function startGps(){
+  if (!('geolocation' in navigator)) { $('status').textContent = 'Kein GPS verfügbar'; return; }
+  if (watchId === null)
+    watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy:true, maximumAge:0, timeout:15000});
+}
+
+// ---- Bildschirm anlassen ----
+// 1) Wake Lock API (iOS 16.4+ in Safari, 18.4+ als Home-Screen-App)
+// 2) Rückfallebene: unsichtbares, stummes Video in Schleife – wie bei Video-Apps,
+//    wirkt auch wenn die Auto-Sperre per Firmenrichtlinie fest eingestellt ist.
+const awakeVideo = document.createElement('video');
+for (const [src,type] of [['keepawake.mp4','video/mp4'],['keepawake.webm','video/webm']]) {
+  const el = document.createElement('source'); el.src = src; el.type = type; awakeVideo.appendChild(el);
+}
+awakeVideo.muted = true; awakeVideo.loop = true;
+awakeVideo.setAttribute('playsinline', ''); awakeVideo.setAttribute('muted', '');
+awakeVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0.01;pointer-events:none;bottom:0;left:0';
+document.body.appendChild(awakeVideo);
+
+async function keepAwake(on){
+  if (on) {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(_) { wakeLock = null; }
+    try { await awakeVideo.play(); } catch(_) {}
+  } else {
+    try { if (wakeLock) await wakeLock.release(); } catch(_) {}
+    wakeLock = null;
+    awakeVideo.pause();
+  }
+}
+document.addEventListener('visibilitychange', () => { if (running && document.visibilityState === 'visible') keepAwake(true); });
+// Video läuft ab und zu aus (z. B. nach Anruf) – wieder anwerfen
+setInterval(() => { if (running && awakeVideo.paused) awakeVideo.play().catch(() => {}); }, 10000);
+
+// Fahrzeit nur zählen, wenn man sich bewegt
+setInterval(() => {
+  const now = Date.now();
+  if (running && lastTick && (window._kmh || 0) > 0) movingMs += now - lastTick;
+  lastTick = now;
+  $('clock').textContent = new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+  if (running) $('time').textContent = fmtTime(movingMs);
+}, 1000);
+
+$('startBtn').onclick = () => {
+  running = !running;
+  startGps();
+  keepAwake(running);
+  $('startBtn').textContent = running ? 'Pause' : 'Weiter';
+  $('startBtn').classList.toggle('pause', running);
+  save();
+};
+$('centerBtn').onclick = () => { follow = true; if (last) map.setView([last.lat, last.lon], 16); };
+$('resetBtn').onclick = () => {
+  if (!confirm('Fahrt zurücksetzen?')) return;
+  distM = 0; maxKmh = 0; movingMs = 0; track.setLatLngs([]);
+  running = false; keepAwake(false);
+  $('startBtn').textContent = 'Start'; $('startBtn').classList.remove('pause');
+  render(0);
+  save();
+};
+map.on('dragstart', () => follow = false);
+setInterval(() => { if (running) save(); }, 5000);
+
+restore();
+startGps(); // Position schon vor dem Start anzeigen
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
