@@ -317,7 +317,10 @@ function camUpdate(anim){
   if (!map) return;
   meEl.classList.add('arrow'); me.setRotation(camBearing);   // eigener Pfeil zeigt immer in Fahrtrichtung
   if (!follow || !last) return;
-  const center = [last.lon, last.lat], dur = anim ? 1000 : 0;
+  const center = [last.lon, last.lat];
+  // Weit weg (App gerade geöffnet, Karte noch auf Deutschland bzw. Überblick): sofort hinspringen statt quer übers Land zu gleiten
+  const far = map.getZoom() < 13 || haversine({lat:map.getCenter().lat, lon:map.getCenter().lng}, last) > 1000;
+  const dur = anim && !far ? 1000 : 0;
   if (nav && !pick) {
     const h = map.getContainer().clientHeight;
     map.easeTo({center, zoom:navZoom, bearing:camBearing, pitch:58, duration:dur, easing:t => t,
@@ -621,8 +624,8 @@ function setNav(n, fit){
   showDest(n.dest);
   try { localStorage.setItem('nav', JSON.stringify({mode:n.mode, dest:n.dest, steps:n.steps, profile:n.profile,
     pts:n.pts.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)])})); } catch(_) {}
-  // Beim Fahren direkt in die 3D-Ansicht, sonst erst Überblick über die ganze Route (Start/Zentrieren → 3D)
-  if (fit) { follow = running && !!last; if (!follow) fitPts([n.pts], 40); }
+  // Neue Route: direkt in die 3D-Ansicht (auch im Stand); ohne GPS-Position erst Überblick, beim ersten Fix dann 3D
+  if (fit) { follow = true; if (!last) fitPts([n.pts], 40); }
   if (last) { updateNav(last, 0); updateBearing(null); camUpdate(true); }
   else navShow('↑', '', n.mode === 'gpx' ? 'GPX-Route geladen' : 'Route berechnet', `${fmtDist(n.total)} · warte auf GPS`);
 }
