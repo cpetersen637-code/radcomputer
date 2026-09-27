@@ -1,5 +1,5 @@
 // Offline-Cache: App-Dateien + zuletzt geladene Kartenkacheln
-const APP = 'radcomputer-v17';
+const APP = 'radcomputer-v18';
 const TILES = 'radcomputer-tiles-osm';  // neuer Name: alte CARTO-Kacheln ("API key required") werden gelöscht
 const CORE = [
   './', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './keepawake.mp4', './keepawake.webm',

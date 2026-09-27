@@ -72,6 +72,13 @@
   #navText{font-weight:600;font-size:15px;text-align:center}
   #navSub{font-size:12px;text-align:center;color:#c9d1d9}
   #navText:empty,#navSub:empty{display:none}
+  /* Kompass oben links: Nadel zeigt nach Norden; grüner Ring = Fahrtrichtung oben, grau = Norden oben */
+  #compass{position:absolute;left:8px;top:6px;z-index:1001;width:46px;height:46px;padding:0;background:none;border:0;border-radius:50%}
+  #compass svg{width:46px;height:46px;display:block}
+  #compass .ring{stroke:#8b949e} #compass.hdg .ring{stroke:var(--accent)}
+  #orientTip{position:absolute;left:60px;top:18px;z-index:1001;font-size:13px;font-weight:600;color:#fff;pointer-events:none;
+    text-shadow:1.5px 0 0 #0e1116,-1.5px 0 0 #0e1116,0 1.5px 0 #0e1116,0 -1.5px 0 #0e1116}
+  #fbText{font:15px Inter,sans-serif;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);min-height:120px;resize:vertical}
   #navEta{position:absolute;top:0;right:10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;line-height:1.3}
   #navEta .f{font-size:22px;text-shadow:none}
   /* Quellenangabe der Karte klein und dunkel */
@@ -138,6 +145,11 @@
 <div id="topShield"></div>
 <div id="mapWrap">
   <div id="map"></div>
+  <button id="compass" aria-label="Kompass: Norden oben / Fahrtrichtung oben"><svg viewBox="-23 -23 46 46">
+    <circle class="ring" r="20" fill="rgba(14,17,22,.75)" stroke-width="2"/>
+    <g id="needle"><path d="M0,-15 L5,0 L-5,0 Z" fill="#ff5d52" stroke="#0e1116" stroke-width="1"/>
+    <path d="M0,15 L5,0 L-5,0 Z" fill="#e6edf3" stroke="#0e1116" stroke-width="1"/></g></svg></button>
+  <div id="orientTip" hidden></div>
   <div id="navBar" hidden>
     <div id="navNow">
       <div class="row"><div id="navArrow"></div><div id="navDist"></div></div>
@@ -153,6 +165,7 @@
       <button class="mi" data-go="gpx">Routen (GPX)</button>
       <button class="mi" data-go="rides">Gefahrene Fahrten</button>
       <button class="mi" data-go="stats">Statistik</button>
+      <button class="mi" data-go="fb">Feedback</button>
       <button class="mi warn" id="mNavEnd">Navigation beenden</button>
     </div>
     <div class="mview" data-v="dest" data-t="Ziel suchen" hidden>
@@ -172,6 +185,11 @@
       <div class="mrow"><button class="sec" id="rideFollow">Nachfahren</button><button class="sec" id="rideShare">GPX teilen</button><button class="danger" id="rideDel">Löschen</button></div>
     </div>
     <div class="mview" data-v="stats" data-t="Statistik" hidden><div id="statsBox"></div></div>
+    <div class="mview" data-v="fb" data-t="Feedback" hidden>
+      <textarea id="fbText" placeholder="Was ist dir aufgefallen? Idee, Fehler, Wunsch …"></textarea>
+      <button id="fbSend">Senden (GitHub)</button>
+      <div class="navhint" style="text-align:left">Öffnet GitHub mit fertig ausgefülltem Eintrag, dort nur noch „Create“ tippen. Das Repo ist öffentlich, also nichts Privates hineinschreiben. Gerät, App-Version und Ansicht werden automatisch angehängt, der Standort nicht.</div>
+    </div>
   </div>
   <div id="routePick" hidden>
     <div class="rt">Route wählen</div>
@@ -236,7 +254,6 @@ try {
     style:{version:8, sources:{}, layers:[{id:'bg', type:'background', paint:{'background-color':MAPCOL.bg}}]},
     attributionControl:{compact:true},
     dragRotate:false, pitchWithRotate:false, touchPitch:false});
-  map.touchZoomRotate.disableRotation();
   fetch('https://tiles.openfreemap.org/styles/liberty').then(r => r.json())
     .then(st => map.setStyle(darkStyle(st), {diff:false}))
     .catch(() => map.setStyle(RASTER, {diff:false}));
@@ -312,6 +329,9 @@ const trackPoints = () => trackSegs.reduce((n, s) => n + s.length, 0);
 // ---- Kamera: folgt der Position, Fahrtrichtung zeigt nach oben. Mit Navigation 3D von hinten (gekippt, man selbst
 // im unteren Teil), ohne Navigation flach, Position etwas unterhalb der Mitte.
 let camBearing = 0;          // aktuelle Fahrtrichtung (Grad)
+let orient = 'hdg';          // 'hdg' = Fahrtrichtung oben, 'north' = Norden oben (Kompass antippen)
+try { orient = localStorage.getItem('orient') === 'north' ? 'north' : 'hdg'; } catch(_) {}
+const viewBearing = () => orient === 'north' ? 0 : camBearing;
 let navZoom = 16.5;          // Zoom der Navi-Ansicht; per Zwei-Finger-Zoom änderbar
 function camUpdate(anim){
   if (!map) return;
@@ -323,11 +343,11 @@ function camUpdate(anim){
   const dur = anim && !far ? 1000 : 0;
   if (nav && !pick) {
     const h = map.getContainer().clientHeight;
-    map.easeTo({center, zoom:navZoom, bearing:camBearing, pitch:58, duration:dur, easing:t => t,
+    map.easeTo({center, zoom:navZoom, bearing:viewBearing(), pitch:58, duration:dur, easing:t => t,
       padding:{top:Math.round(h * .5), bottom:0, left:0, right:0}});
   } else {
     const h = map.getContainer().clientHeight;
-    map.easeTo({center, zoom:Math.max(map.getZoom(), 15), bearing:camBearing, pitch:0, duration:dur, easing:t => t,
+    map.easeTo({center, zoom:Math.max(map.getZoom(), 15), bearing:viewBearing(), pitch:0, duration:dur, easing:t => t,
       padding:{top:Math.round(h * .3), bottom:0, left:0, right:0}});
   }
 }
@@ -556,6 +576,26 @@ $('resetBtn').onclick = async () => {
 };
 if (map) {
   map.on('dragstart', () => follow = false);
+  // Von Hand gedreht: Folgen aus (wie beim Verschieben); Kompass oder „Zentrieren“ holt es zurück
+  map.on('rotatestart', e => { if (e.originalEvent) follow = false; });
+  map.on('rotate', () => $('needle').setAttribute('transform', `rotate(${-map.getBearing()})`));
+}
+// Kompass antippen: zwischen Fahrtrichtung oben und Norden oben wechseln (gemerkt), Folgen wieder an
+let tipTimer = null;
+function showOrient(){
+  $('compass').classList.toggle('hdg', orient === 'hdg');
+}
+$('compass').onclick = () => {
+  orient = orient === 'hdg' ? 'north' : 'hdg';
+  try { localStorage.setItem('orient', orient); } catch(_) {}
+  showOrient();
+  $('orientTip').textContent = orient === 'hdg' ? 'Fahrtrichtung oben' : 'Norden oben';
+  $('orientTip').hidden = false; clearTimeout(tipTimer); tipTimer = setTimeout(() => $('orientTip').hidden = true, 1500);
+  follow = true;
+  if (last) camUpdate(true); else if (map) map.easeTo({bearing:0, duration:500});
+};
+showOrient();
+if (map) {
   // eigener Zoom in der Navi-Ansicht bleibt erhalten
   map.on('zoomend', e => { if (e.originalEvent && nav && follow) navZoom = map.getZoom(); });
 }
@@ -898,6 +938,7 @@ function showView(v, push){
   if (v === 'gpx') showGpxList();
   if (v === 'rides') showRides();
   if (v === 'stats') showStats();
+  if (v === 'fb') { try { $('fbText').value = localStorage.getItem('fbDraft') || ''; } catch(_) {} }
 }
 function openMenu(){ mStack = []; $('menu').hidden = false; showView('main'); }
 function closeMenu(){ $('menu').hidden = true; clearAlts(); }
@@ -1047,6 +1088,28 @@ $('rideDel').onclick = async () => {
   if (!curRide || !confirm('Diese Fahrt löschen?')) return;
   await DB.del('rides', curRide.id); curRide = null; clearAlts();
   mStack.pop(); showView('rides', false);
+};
+
+// ---- Feedback: fertig ausgefüllter GitHub-Eintrag (Issue) im Repo, Entwurf bleibt bis zum Senden gespeichert ----
+const REPO = 'https://github.com/cpetersen637-code/radcomputer';
+$('fbText').oninput = () => { try { localStorage.setItem('fbDraft', $('fbText').value); } catch(_) {} };
+$('fbSend').onclick = async () => {
+  const text = $('fbText').value.trim();
+  if (!text) { $('fbText').focus(); return; }
+  let ver = '?';
+  try { ver = (await caches.keys()).find(k => /^radcomputer-v\d+$/.test(k)) || '?'; } catch(_) {}
+  const info = [`App: ${ver}${navigator.standalone ? ' · Home-Bildschirm' : ' · Browser'}`,
+    `Gerät: ${navigator.userAgent.match(/\(([^)]+)\)/)?.[1] || navigator.userAgent} · ${innerWidth}×${innerHeight} @${devicePixelRatio}x`,
+    `Ansicht: ${nav ? 'Navigation ' + (nav.mode === 'gpx' ? '(GPX)' : '(Route)') : 'ohne Navi'} · ${orient === 'hdg' ? 'Fahrtrichtung oben' : 'Norden oben'}` +
+      ` · Aufzeichnung ${running ? 'läuft' : 'aus'}`,
+    `Zeit: ${new Date().toLocaleString('de-DE')}`];
+  const title = text.split('\n')[0].slice(0, 70);
+  const body = `${text}\n\n---\n${info.map(l => '- ' + l).join('\n')}\n\n_aus der App gesendet_`;
+  window.open(`${REPO}/issues/new?title=${encodeURIComponent('Feedback: ' + title)}&body=${encodeURIComponent(body)}`, '_blank');
+  if (confirm('Eintrag auf GitHub abgeschickt? Dann wird der Text hier geleert.')) {
+    $('fbText').value = ''; try { localStorage.removeItem('fbDraft'); } catch(_) {}
+    closeMenu();
+  }
 };
 
 // ---- Statistik ----
