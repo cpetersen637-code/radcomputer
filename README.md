@@ -36,7 +36,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
   - **Routenauswahl:** nach der Zielwahl mehrere Varianten farbig auf der Karte + Liste (km · min · Anzahl Abbiegungen, Markierung „Kürzeste“ / „Wenigste Abbiegungen“), antippen (Liste oder Linie) hebt die Route hervor und zoomt darauf, „Los“ startet. Varianten: **Valhalla** auf dem FOSSGIS-Server (`valhalla1.openstreetmap.de`, bicycle/Hybrid, `use_roads` 0,5 mit 2 Alternativen, dazu `use_roads` 0,9 = mehr Hauptstrecken, weniger Abbiegen) und **OSRM** (`routing.openstreetmap.de/routed-bike`). Fast gleiche Routen (90 % der Punkte < 25 m) werden aussortiert. Valhalla war im Test (40 Routen) ~16 % kürzer als OSRM.
   - `removeBacktracks`: Kommt eine Route nach > 80 m wieder auf < 25 m an eine frühere Stelle (oder den Startpunkt) zurück (typisch: einseitiger Radweg → erst weg, wenden, auf der anderen Seite zurück), wird das Stück durch den direkten Weg ersetzt.
   - Neuberechnung unterwegs nutzt die gewählte Variante (`nav.profile`), ohne erneute Auswahl.
-  - **3D-Ansicht von hinten** (`camUpdate()`): Solange eine Navigation läuft und die Karte folgt, ist die Karte gekippt (Pitch 58°), die Fahrtrichtung zeigt nach oben und die eigene Position (flacher grüner Pfeil) sitzt im unteren Teil, die Route liegt davor. Richtung = Verlauf der Route 25 m voraus (`updateBearing()`), neben der Route der GPS-Kurs. Kamera gleitet in 1 s zur nächsten Position. Bereits gefahrener Teil der Route wird ausgeblendet. Zwei-Finger-Zoom ändert den Navi-Zoom (`navZoom`, Standard 16,5), Verschieben schaltet das Folgen ab, „Zentrieren“ zurück in die 3D-Ansicht. Ohne Navigation flach und nordwärts. Drehen/Kippen per Geste ist abgeschaltet.
+  - **3D-Ansicht von hinten** (`camUpdate()`): Solange eine Navigation läuft und die Karte folgt, ist die Karte gekippt (Pitch 58°), die Fahrtrichtung zeigt nach oben und die eigene Position (flacher grüner Pfeil) sitzt im unteren Teil, die Route liegt davor. Richtung = Verlauf der Route 25 m voraus (`updateBearing()`), neben der Route der GPS-Kurs. Kamera gleitet in 1 s zur nächsten Position. Bereits gefahrener Teil der Route wird ausgeblendet. Zwei-Finger-Zoom ändert den Navi-Zoom (`navZoom`, Standard 16,5), Verschieben schaltet das Folgen ab, „Zentrieren“ zurück in die 3D-Ansicht. Ohne Navigation flach, aber ebenfalls in Fahrtrichtung gedreht (Position etwas unter der Mitte); Richtung aus dem GPS-Kurs, sonst aus der Bewegung ab 12 m (`hdgRef`), im Stand bleibt sie stehen. Eigene Position ist immer ein Pfeil in Fahrtrichtung. Drehen/Kippen per Geste ist abgeschaltet.
   - Anzeige oben, frei auf der Karte (ohne Kachel): mittig nur die nächste Abbiegung als blauer Pfeil + Meter, oben rechts 🏁 mit Rest-km und Ankunftszeit untereinander (Ankunft nach eigenem Schnitt, sonst 18 km/h). Scharfe dunkle Kontur (paint-order/-webkit-text-stroke) statt weichem Schatten.
   - Mehr als 40 m neben der Route (3 GPS-Punkte hintereinander) → Route wird neu berechnet (höchstens alle 10 s). Bei GPX-Routen nur Warnung „neben der Route“ mit Abstand, ohne Abbiegehinweise.
   - Ziel erreicht bei < 25 m Rest. Navigation wird in `localStorage` (Schlüssel `nav`) gesichert und beim Öffnen wiederhergestellt.
@@ -46,7 +46,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 - **Bildschirm bleibt an** während der Fahrt (Wake Lock API + Video-Trick, siehe unten).
 - **Offline:** Die App startet ohne Netz. Schon angesehene Kartenkacheln kommen aus dem Cache (max. ca. 2000 Kacheln).
 - **Querformat:** Karte links, Anzeigen rechts.
-- **Darstellung oben** (Menü): Als Home-Bildschirm-App legt iOS einen Weichzeichner unter die Statusleiste, der bis in die Karte reicht (im Safari-Tab nicht). Varianten (`localStorage` `topfix`, im `<head>` vor dem Zeichnen angewendet): 1 fester deckender Streifen `#topShield` (Standard), 2 ohne `viewport-fit=cover`, 3 Streifen + 32 px Abstand.
+- **Oben:** Als Home-Bildschirm-App legt iOS einen Weichzeichner unter die Statusleiste, der bis in die Karte reicht (im Safari-Tab nicht). Lösung (vom Nutzer am iPhone bestätigt): fester deckender Streifen `#topShield` + 32 px Abstand (`body` padding-top). Der frühere Umschalter mit Varianten und Messwerten ist entfernt.
 
 ---
 
@@ -128,15 +128,15 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 
 ---
 
-### Offen: „oben verschwommen“ nur als Home-Bildschirm-App (Stand 26.09.2026)
+### Erledigt: „oben verschwommen“ nur als Home-Bildschirm-App (27.09.2026)
 
-- Auf dem iPhone ist der obere Bereich (etwa auf Höhe der Zielflagge) unscharf, **nur** als Home-Bildschirm-App, im Safari-Tab scharf. Nutzer: „so wild ist es nicht“, daher zurückgestellt.
-- Bereits probiert, **ohne Erfolg**: Statusleiste `black` statt `black-translucent`; harte `text-shadow`-Kontur statt `-webkit-text-stroke`; Menü → Darstellung oben: Variante 1 (fester Streifen), 2 (ohne `viewport-fit=cover`), 3 (Streifen + 32 px Abstand).
-- Nächster Schritt: Messwerte unter ☰ → Darstellung oben im App-Modus ablesen (Screenshot) – Verdacht: Karte/GL-Canvas wird im App-Modus skaliert oder um Bruchteile eines Pixels versetzt (im Desktop-Test ist die Kartenhöhe z. B. 563,80 px, also nicht ganzzahlig). Danach Umschalter wieder entfernen.
+- Variante 3 (fester Streifen + 32 px Abstand) hat laut Nutzer geholfen und ist jetzt fest eingebaut, Umschalter und Messwerte sind raus. Vorher ohne Erfolg: Statusleiste `black` statt `black-translucent`, `text-shadow` statt `-webkit-text-stroke`, Variante 1 und 2.
 
 ## Tests
 
 `tests/` enthält Playwright-Skripte (Python, Edge per `channel='msedge'`, Server: `python -m http.server 8765` im Projektordner, Ausgabe mit `PYTHONIOENCODING=utf-8`). Screenshots landen in `%TEMP%`.
+- `rc_3d.py` – Ziel wählen, Los, entlang der Route fahren: prüft 3D-Ansicht (Pitch/Richtung vor und nach einer Abbiegung), Folgen/Zentrieren, Rechtsklick-Popup
+- `rc_heading.py` – ohne Navi: Karte dreht in Fahrtrichtung (mit/ohne GPS-Kurs), bleibt im Stand ruhig
 - `rc_sim.py` – simulierte Fahrt mit Tempo-Ausreißern, GPS-Sprüngen und Höhenrauschen (prüft Filter, Max, Höhenmeter)
 - `rc_menu.py` – Beenden/Speichern, Fahrtenliste, GPX-Export, Statistik, GPX-Import, letzte Ziele
 - `rc_alt.py`, `rc_pick.py` – Routenauswahl, removeBacktracks, Neuberechnung

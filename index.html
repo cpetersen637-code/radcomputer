@@ -11,14 +11,6 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
 <title>Radcomputer</title>
-<script>
-// Darstellung oben (gegen den Weichzeichner, den iOS als Home-Bildschirm-App unter die Statusleiste legt).
-// Variante wird im Menü gewählt und vor dem ersten Zeichnen angewendet.
-(function(){ var v = '1'; try { v = localStorage.getItem('topfix') || '1'; } catch(e) {}
-  document.documentElement.setAttribute('data-topfix', v);
-  if (v === '2') document.querySelector('meta[name=viewport]').setAttribute('content', 'width=device-width, initial-scale=1, user-scalable=no');
-})();
-</script>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -28,13 +20,11 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden}
-  body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
-  /* fester, deckender Streifen hinter der Statusleiste; Variante 3 zusätzlich 32 px Abstand */
-  #topShield{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:var(--bg);z-index:5000;pointer-events:none}
-  html[data-topfix="2"] #topShield{display:none}
-  html[data-topfix="3"] body{padding-top:calc(env(safe-area-inset-top) + 32px)}
-  html[data-topfix="3"] #topShield{height:calc(env(safe-area-inset-top) + 32px)}
-  .mi.on{border-color:var(--accent)} .mi.on::after{content:'✓';color:var(--accent);font-size:16px}
+  body{display:flex;flex-direction:column}
+  /* Als Home-Bildschirm-App legt iOS einen Weichzeichner unter die Statusleiste, der bis in die Karte reicht:
+     fester, deckender Streifen dahinter + 32 px Abstand (so auf dem iPhone getestet und scharf) */
+  body{padding-top:calc(env(safe-area-inset-top) + 32px)}
+  #topShield{position:fixed;top:0;left:0;right:0;height:calc(env(safe-area-inset-top) + 32px);background:var(--bg);z-index:5000;pointer-events:none}
   [hidden]{display:none!important}
   #mapWrap{flex:1;min-height:30vh;position:relative;border-bottom:1px solid var(--line)}
   #map{position:absolute;inset:0;background:#161b22;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -163,7 +153,6 @@
       <button class="mi" data-go="gpx">Routen (GPX)</button>
       <button class="mi" data-go="rides">Gefahrene Fahrten</button>
       <button class="mi" data-go="stats">Statistik</button>
-      <button class="mi" data-go="topfix">Darstellung oben</button>
       <button class="mi warn" id="mNavEnd">Navigation beenden</button>
     </div>
     <div class="mview" data-v="dest" data-t="Ziel suchen" hidden>
@@ -183,14 +172,6 @@
       <div class="mrow"><button class="sec" id="rideFollow">Nachfahren</button><button class="sec" id="rideShare">GPX teilen</button><button class="danger" id="rideDel">Löschen</button></div>
     </div>
     <div class="mview" data-v="stats" data-t="Statistik" hidden><div id="statsBox"></div></div>
-    <div class="mview" data-v="topfix" data-t="Darstellung oben" hidden>
-      <div class="navhint" style="text-align:left">Falls der obere Rand als Home-Bildschirm-App verschwommen ist: Variante wählen, die App lädt neu.</div>
-      <button class="mi" data-fix="1">1 · Fester Balken (Standard)</button>
-      <button class="mi" data-fix="2">2 · Ohne Randbereich</button>
-      <button class="mi" data-fix="3">3 · Mit Abstand</button>
-      <div class="msec">Messwerte (für die Fehlersuche)</div>
-      <pre id="diag" style="font:11px/1.4 'JetBrains Mono',monospace;color:var(--muted);white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:8px"></pre>
-    </div>
   </div>
   <div id="routePick" hidden>
     <div class="rt">Route wählen</div>
@@ -328,24 +309,24 @@ function addPoint(pt, newSeg){
 let rec = [];
 const trackPoints = () => trackSegs.reduce((n, s) => n + s.length, 0);
 
-// ---- Kamera: folgt der Position. Mit Navigation 3D von hinten (gekippt, Fahrtrichtung oben, man selbst im unteren Drittel),
-// ohne Navigation flach und nordwärts wie bisher.
+// ---- Kamera: folgt der Position, Fahrtrichtung zeigt nach oben. Mit Navigation 3D von hinten (gekippt, man selbst
+// im unteren Teil), ohne Navigation flach, Position etwas unterhalb der Mitte.
 let camBearing = 0;          // aktuelle Fahrtrichtung (Grad)
 let navZoom = 16.5;          // Zoom der Navi-Ansicht; per Zwei-Finger-Zoom änderbar
 function camUpdate(anim){
-  if (!map || !follow || !last) return;
+  if (!map) return;
+  meEl.classList.add('arrow'); me.setRotation(camBearing);   // eigener Pfeil zeigt immer in Fahrtrichtung
+  if (!follow || !last) return;
   const center = [last.lon, last.lat], dur = anim ? 1000 : 0;
   if (nav && !pick) {
     const h = map.getContainer().clientHeight;
     map.easeTo({center, zoom:navZoom, bearing:camBearing, pitch:58, duration:dur, easing:t => t,
       padding:{top:Math.round(h * .5), bottom:0, left:0, right:0}});
   } else {
-    map.easeTo({center, zoom:Math.max(map.getZoom(), 15), bearing:0, pitch:0, duration:dur, easing:t => t,
-      padding:{top:0, bottom:0, left:0, right:0}});
+    const h = map.getContainer().clientHeight;
+    map.easeTo({center, zoom:Math.max(map.getZoom(), 15), bearing:camBearing, pitch:0, duration:dur, easing:t => t,
+      padding:{top:Math.round(h * .3), bottom:0, left:0, right:0}});
   }
-  const arrow = !!nav && !pick;
-  meEl.classList.toggle('arrow', arrow);
-  me.setRotation(arrow ? camBearing : 0);
 }
 const brg = (a, b) => { const r = Math.PI / 180;
   return (Math.atan2((b[1] - a[1]) * Math.cos(a[0] * r), b[0] - a[0]) / r + 360) % 360; };
@@ -364,8 +345,15 @@ function updateBearing(c){
     const a = routeAt(nav.along), b = routeAt(nav.along + 25);
     if (a[0] !== b[0] || a[1] !== b[1]) { camBearing = brg(a, b); return; }
   }
-  if (c && c.heading != null && isFinite(c.heading) && (c.speed || 0) > 1.5) camBearing = c.heading;
+  if (!c) return;
+  if (c.heading != null && isFinite(c.heading) && (c.speed || 0) > 1.5) { camBearing = c.heading; hdgRef = null; return; }
+  // kein GPS-Kurs: Richtung aus der Bewegung (erst ab 12 m, sonst dreht GPS-Rauschen im Stand die Karte)
+  if (c.accuracy > 30) return;
+  const q = [c.latitude, c.longitude];
+  if (!hdgRef) { hdgRef = q; return; }
+  if (haversine(ll(hdgRef), ll(q)) > 12) { camBearing = brg(hdgRef, q); hdgRef = q; }
 }
+let hdgRef = null;   // Bezugspunkt für die Richtung aus der Bewegung
 
 // ---- Zustand ----
 let watchId = null, running = false, follow = true;
@@ -907,7 +895,6 @@ function showView(v, push){
   if (v === 'gpx') showGpxList();
   if (v === 'rides') showRides();
   if (v === 'stats') showStats();
-  if (v === 'topfix') showDiag();
 }
 function openMenu(){ mStack = []; $('menu').hidden = false; showView('main'); }
 function closeMenu(){ $('menu').hidden = true; clearAlts(); }
@@ -916,29 +903,7 @@ $('mClose').onclick = closeMenu;
 $('mBack').onclick = () => { mStack.pop(); clearAlts(); showView(mStack[mStack.length-1], false); };
 document.querySelectorAll('#menu .mi[data-go]').forEach(b => b.onclick = () => showView(b.dataset.go));
 $('mNavEnd').onclick = () => { endNav(); closeMenu(); };
-document.querySelectorAll('#menu .mi[data-fix]').forEach(b => {
-  b.classList.toggle('on', b.dataset.fix === document.documentElement.getAttribute('data-topfix'));
-  b.onclick = () => { try { localStorage.setItem('topfix', b.dataset.fix); } catch(_) {} save(); location.reload(); };
-});
 
-// Messwerte für die Fehlersuche „oben unscharf“ (nur Anzeige)
-function showDiag(){
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
-  document.body.appendChild(probe); const cs = getComputedStyle(probe);
-  const safe = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(v => parseFloat(v)).join('/');
-  probe.remove();
-  const cv = document.querySelector('.maplibregl-canvas'), vv = window.visualViewport;
-  const r = cv ? cv.getBoundingClientRect() : null, mw = $('map').getBoundingClientRect();
-  $('diag').textContent = [
-    `App-Modus: ${navigator.standalone ? 'ja' : 'nein'} · Variante ${document.documentElement.getAttribute('data-topfix')}`,
-    `Fenster: ${innerWidth}×${innerHeight} · Bildschirm ${screen.width}×${screen.height} · DPR ${devicePixelRatio}`,
-    `Viewport: ${vv ? `${vv.width.toFixed(2)}×${vv.height.toFixed(2)} scale ${vv.scale} offset ${vv.offsetTop}` : '–'}`,
-    `Safe-Area o/r/u/l: ${safe}`,
-    `Karte: y ${mw.top.toFixed(2)} h ${mw.height.toFixed(2)}`,
-    cv ? `Canvas: ${cv.width}×${cv.height} px, CSS ${r.width.toFixed(2)}×${r.height.toFixed(2)} @ ${r.left.toFixed(2)},${r.top.toFixed(2)}` : 'Canvas: – (Rasterkarte)',
-  ].filter(Boolean).join('\n');
-}
 
 // ---- Ziel ----
 function chooseDest(dest){
