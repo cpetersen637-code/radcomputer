@@ -1,13 +1,10 @@
 // Offline-Cache: App-Dateien + zuletzt geladene Kartenkacheln
-const APP = 'radcomputer-v14';
+const APP = 'radcomputer-v15';
 const TILES = 'radcomputer-tiles-osm';  // neuer Name: alte CARTO-Kacheln ("API key required") werden gelöscht
 const CORE = [
   './', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png', './keepawake.mp4', './keepawake.webm',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
-  'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js',
-  'https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js'
+  'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'
 ];
 
 self.addEventListener('install', e => {

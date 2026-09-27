@@ -23,7 +23,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 
 ## Funktionen (Stand jetzt)
 
-- **Karte:** Leaflet 1.9.4 + MapLibre GL 4.7.1 (via unpkg-CDN, Plugin `maplibre-gl-leaflet`). Vektorkarte von **OpenFreeMap** (OSM-Daten, kostenlos, ohne Key), Basis-Stil „liberty“, per `darkStyle()` komplett umgefärbt (Farben in `MAPCOL` oben im Script). Ohne WebGL oder wenn der Stil nicht lädt: OSM-Rasterkarte grau abgedunkelt. (CARTO verlangt seit 2026 einen API-Key.) Folgt der Position. Wer die Karte verschiebt, schaltet das Folgen ab, „Zentrieren“ schaltet es wieder ein.
+- **Karte:** MapLibre GL 4.7.1 direkt (via unpkg-CDN; bis v14 Leaflet + Plugin, das konnte nicht kippen/drehen). Vektorkarte von **OpenFreeMap** (OSM-Daten, kostenlos, ohne Key), Basis-Stil „liberty“, per `darkStyle()` komplett umgefärbt (Farben in `MAPCOL` oben im Script). Wenn der Stil nicht lädt: OSM-Rasterkarte grau/invertiert (Stil `RASTER`). Ohne WebGL keine Karte, der Tacho läuft trotzdem. Gebäude mit Höhe (nur in der 3D-Ansicht sichtbar). Eigene Linien (Route, Strecke, Vorschläge, Fahrt) als GeoJSON-Quellen in `OV`, werden nach jedem Stilwechsel per `addOverlays()` neu eingehängt. (CARTO verlangt seit 2026 einen API-Key.) Folgt der Position. Wer die Karte verschiebt, schaltet das Folgen ab, „Zentrieren“ schaltet es wieder ein.
 - **Tacho:** Nimmt `coords.speed` vom GPS, sonst Strecke ÷ Zeit (nur zwischen zwei genauen Punkten ≥ 1 s auseinander). Werte > 90 km/h werden verworfen, angezeigt wird der Median der letzten 3 Werte (einzelne Ausreißer kommen nicht durch, auch nicht ins Max). Unter 1,5 km/h wird 0 angezeigt.
 - **Distanz:** Haversine ab dem letzten Streckenpunkt (`lastGood`). Punkt zählt nur bei Genauigkeit < 30 m, Abstand > 3 m und Streckentempo < 90 km/h (so wird auch langsames Fahren korrekt summiert). Nach Start/Weiter beginnt ein neuer Streckenabschnitt, die Strecke während der Pause zählt nicht.
 - **Fahrzeit:** Zählt nur, wenn Tempo > 0 und der letzte GPS-Punkt jünger als 5 s ist (bei Signalverlust steht die Zeit, Anzeige „Kein GPS-Signal“).
@@ -36,6 +36,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
   - **Routenauswahl:** nach der Zielwahl mehrere Varianten farbig auf der Karte + Liste (km · min · Anzahl Abbiegungen, Markierung „Kürzeste“ / „Wenigste Abbiegungen“), antippen (Liste oder Linie) hebt die Route hervor und zoomt darauf, „Los“ startet. Varianten: **Valhalla** auf dem FOSSGIS-Server (`valhalla1.openstreetmap.de`, bicycle/Hybrid, `use_roads` 0,5 mit 2 Alternativen, dazu `use_roads` 0,9 = mehr Hauptstrecken, weniger Abbiegen) und **OSRM** (`routing.openstreetmap.de/routed-bike`). Fast gleiche Routen (90 % der Punkte < 25 m) werden aussortiert. Valhalla war im Test (40 Routen) ~16 % kürzer als OSRM.
   - `removeBacktracks`: Kommt eine Route nach > 80 m wieder auf < 25 m an eine frühere Stelle (oder den Startpunkt) zurück (typisch: einseitiger Radweg → erst weg, wenden, auf der anderen Seite zurück), wird das Stück durch den direkten Weg ersetzt.
   - Neuberechnung unterwegs nutzt die gewählte Variante (`nav.profile`), ohne erneute Auswahl.
+  - **3D-Ansicht von hinten** (`camUpdate()`): Solange eine Navigation läuft und die Karte folgt, ist die Karte gekippt (Pitch 58°), die Fahrtrichtung zeigt nach oben und die eigene Position (flacher grüner Pfeil) sitzt im unteren Teil, die Route liegt davor. Richtung = Verlauf der Route 25 m voraus (`updateBearing()`), neben der Route der GPS-Kurs. Kamera gleitet in 1 s zur nächsten Position. Bereits gefahrener Teil der Route wird ausgeblendet. Zwei-Finger-Zoom ändert den Navi-Zoom (`navZoom`, Standard 16,5), Verschieben schaltet das Folgen ab, „Zentrieren“ zurück in die 3D-Ansicht. Ohne Navigation flach und nordwärts. Drehen/Kippen per Geste ist abgeschaltet.
   - Anzeige oben, frei auf der Karte (ohne Kachel): mittig nur die nächste Abbiegung als blauer Pfeil + Meter, oben rechts 🏁 mit Rest-km und Ankunftszeit untereinander (Ankunft nach eigenem Schnitt, sonst 18 km/h). Scharfe dunkle Kontur (paint-order/-webkit-text-stroke) statt weichem Schatten.
   - Mehr als 40 m neben der Route (3 GPS-Punkte hintereinander) → Route wird neu berechnet (höchstens alle 10 s). Bei GPX-Routen nur Warnung „neben der Route“ mit Abstand, ohne Abbiegehinweise.
   - Ziel erreicht bei < 25 m Rest. Navigation wird in `localStorage` (Schlüssel `nav`) gesichert und beim Öffnen wiederhergestellt.
@@ -120,9 +121,9 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 2. ~~**Fahrtenverlauf + GPX-Export.**~~ (erledigt: Menü → Gefahrene Fahrten) „Fahrt beenden“ speichert die Fahrt in eine Liste (IndexedDB oder localStorage), Export als `.gpx` (Teilen-Menü auf iOS via `navigator.share` mit Datei oder Download-Link) für Strava/Komoot. Dafür Punkte mit Zeitstempel und Höhe speichern (aktuell nur lat/lon).
 3. ~~Höhenmeter bergauf~~ (erledigt)
 4. **Beim Wiederherstellen** optional direkt fragen „Fahrt fortsetzen?“ statt nur den Knopf auf „Weiter“ zu setzen.
-5. **Google Maps (optional).** Nur falls gewünscht: Google Maps JS API mit eigenem Key (Google Cloud, Kreditkarte, Key auf die eigene Domain beschränken). Alternativ in Leaflet eine hellere Kartenvariante oder Satellit (z. B. Esri World Imagery) als umschaltbare Ebene anbieten, ist kostenlos.
+5. **Google Maps (optional).** Nur falls gewünscht: Google Maps JS API mit eigenem Key (Google Cloud, Kreditkarte, Key auf die eigene Domain beschränken). Alternativ in MapLibre eine hellere Kartenvariante oder Satellit (z. B. Esri World Imagery) als umschaltbare Ebene anbieten, ist kostenlos.
 6. **Heller Modus / Sonnenlicht-Modus** (hoher Kontrast bei Sonne).
-7. **Leaflet lokal einbinden** statt über unpkg (dann keine Abhängigkeit von einem CDN; Dateien in den Ordner legen und in `sw.js` cachen).
+7. **MapLibre lokal einbinden** statt über unpkg (dann keine Abhängigkeit von einem CDN; Dateien in den Ordner legen und in `sw.js` cachen).
 8. **Später evtl. native iOS-App** (Swift/SwiftUI oder Flutter), die auch bei gesperrtem Bildschirm aufzeichnet und Bluetooth-Sensoren (Trittfrequenz, Puls) kann. Braucht einen Mac + Apple-Entwicklerkonto (99 €/Jahr). Bei einem Firmen-iPhone evtl. durch MDM eingeschränkt.
 
 ---
@@ -156,7 +157,7 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 ## Technische Notizen
 
 - Keine Build-Tools, kein npm nötig. Einfach Dateien bearbeiten.
-- Zentrale Zustandsvariablen in `index.html`: `running`, `distM`, `maxKmh`, `movingMs`, `last`, `track` (Leaflet-Polyline mit Abschnitten, gespeichert als Liste von Abschnitten), `newSeg`, `lastFixAt`.
+- Zentrale Zustandsvariablen in `index.html`: `running`, `distM`, `maxKmh`, `movingMs`, `last`, `trackSegs` (Liste von Abschnitten aus [lat, lon]), `newSeg`, `lastFixAt`.
 - Wichtige Funktionen: `onPos` (GPS-Verarbeitung), `render` (Anzeige), `save`/`restore` (localStorage), `keepAwake` (Wake Lock + Video).
 - Navigation: `nav` (aktive Route), `planRoutes` (Varianten + Auswahl), `routeTo` (Neuberechnung), `routeValhalla`/`routeOsrm`, `removeBacktracks`, `sameRoute`, `valStep`/`stepText` (Manöver → Pfeil), `project` (Position auf Route projizieren), `updateNav` (bei jedem GPS-Punkt), `searchPlace` (Nominatim), `loadGpx`. `sw.js` cached Nominatim/Routing (OSRM, Valhalla) absichtlich nicht.
 - Farben als CSS-Variablen in `:root` (`--accent` grün `#3ddc97`, `--warn` orange für Pause).

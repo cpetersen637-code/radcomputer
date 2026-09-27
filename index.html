@@ -19,7 +19,6 @@
   if (v === '2') document.querySelector('meta[name=viewport]').setAttribute('content', 'width=device-width, initial-scale=1, user-scalable=no');
 })();
 </script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -38,10 +37,14 @@
   .mi.on{border-color:var(--accent)} .mi.on::after{content:'✓';color:var(--accent);font-size:16px}
   [hidden]{display:none!important}
   #mapWrap{flex:1;min-height:30vh;position:relative;border-bottom:1px solid var(--line)}
-  #map{position:absolute;inset:0}
-  .leaflet-container{background:#161b22}
-  /* Nur Rückfallebene ohne WebGL: OSM-Rasterkarte grau abdunkeln */
-  .rasterdark .leaflet-tile-pane{filter:grayscale(1) invert(1) brightness(1.05) contrast(.85)}
+  #map{position:absolute;inset:0;background:#161b22;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  /* eigene Position: Punkt, in der Navi-Ansicht flacher Pfeil in Fahrtrichtung */
+  .me{width:22px;height:22px;border-radius:50%;background:#3ddc97;border:3px solid #fff}
+  .me svg{display:none}
+  .me.arrow{width:44px;height:44px;border:0;background:none}
+  .me.arrow svg{display:block;width:44px;height:44px}
+  .destpt{width:16px;height:16px;border-radius:50%;background:#4ea1ff;border:2px solid #fff}
+  .nomap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;padding:20px;text-align:center}
   button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   /* unten nur knapp Abstand zum Home-Balken lassen, damit der Block weiter unten sitzt */
   .dash{padding:10px max(12px,env(safe-area-inset-right)) max(6px,calc(env(safe-area-inset-bottom) - 16px)) max(12px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:8px}
@@ -82,8 +85,11 @@
   #navEta{position:absolute;top:0;right:10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;line-height:1.3}
   #navEta .f{font-size:22px;text-shadow:none}
   /* Quellenangabe der Karte klein und dunkel */
-  .leaflet-container .leaflet-control-attribution{background:rgba(14,17,22,.6);color:#6b7480;font-size:9px;padding:0 4px}
-  .leaflet-control-attribution a{color:#8b949e}
+  .maplibregl-ctrl-attrib{background:rgba(14,17,22,.6)!important;color:#6b7480;font-size:9px}
+  .maplibregl-ctrl-attrib a{color:#8b949e}
+  .maplibregl-ctrl-attrib-button{filter:invert(1);opacity:.4}
+  .maplibregl-popup-content{background:var(--panel);padding:8px;border-radius:10px}
+  .maplibregl-popup-tip{border-top-color:var(--panel)!important;border-bottom-color:var(--panel)!important}
   /* Menü (☰): Hauptliste + Unteransichten */
   #menu{position:absolute;left:8px;right:8px;bottom:8px;z-index:1001;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(100% - 16px);overflow-y:auto}
@@ -130,7 +136,7 @@
   #routeList .s{font-size:12px;color:var(--muted);margin-top:1px}
   #routePick button{padding:8px;font-size:14px}
   .navhint{font-size:12px;color:var(--muted);text-align:center}
-  .leaflet-popup-content button{padding:8px 12px;font-size:14px}
+  .maplibregl-popup-content button{padding:8px 12px;font-size:14px}
   @media (orientation:landscape) and (max-height:500px){
     body{flex-direction:row}
     #mapWrap{border-bottom:0;border-right:1px solid var(--line)}
@@ -210,16 +216,11 @@
   <div class="status"><span class="dot" id="dot"></span><span id="status">Bereit</span></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
 <script>
-// ---- Karte: Vektorkarte von OpenFreeMap (OSM-Daten, kostenlos, kein API-Key) mit eigenem dunklen Stil ----
-const map = L.map('map', {zoomControl:false, attributionControl:true, maxZoom:19}).setView([51.16, 10.45], 6);
-map.attributionControl.setPrefix(false);
-// Farben der Karte – hier anpassen
+// ---- Karte: MapLibre GL (kippbar/drehbar für die 3D-Navi-Ansicht), Vektorkarte von OpenFreeMap mit eigenem dunklen Stil ----
 const MAPCOL = {bg:'#161b22', water:'#1c3b52', park:'#18302a', build:'#1f262f', minor:'#343d49', major:'#4b5767',
-  motor:'#6b5a3a', rail:'#2c333c', border:'#3a3f47', cycle:'#2f6b58', text:'#aab4c0', waterText:'#6f9bb8', halo:'#0e1116'};
+  motor:'#6b5a3a', rail:'#2c333c', border:'#3a3f47', cycle:'#2f6b58', text:'#aab4c0', waterText:'#6f9bb8', halo:'#0e1116', build3d:'#232b35'};
 // Basis ist der Stil "liberty" (enthält alle Ebenen); POI-Symbole und Hausnummern raus, alle Farben ersetzen
 function darkStyle(st){
   const C = MAPCOL;
@@ -231,7 +232,7 @@ function darkStyle(st){
       const k = l.type + '-color'; delete p[l.type + '-pattern']; delete p['fill-outline-color'];
       p[k] = /water/.test(id) ? C.water : /park|wood|grass|landcover|landuse_(park|cemetery)/.test(id) ? C.park
         : /building/.test(id) ? C.build : C.bg;
-      if (l.type === 'fill-extrusion') { p['fill-extrusion-height'] = 0; p['fill-extrusion-base'] = 0; }
+      if (l.type === 'fill-extrusion') { p[k] = C.build3d; p['fill-extrusion-opacity'] = .75; }   // Gebäude mit Höhe (sichtbar in der 3D-Ansicht)
     } else if (l.type === 'line') {
       delete p['line-pattern'];
       p['line-color'] = /water|river/.test(id) ? C.water : /rail|transit/.test(id) ? C.rail : /boundary/.test(id) ? C.border
@@ -244,33 +245,127 @@ function darkStyle(st){
   }
   return st;
 }
-function rasterFallback(){  // ohne WebGL oder wenn der Stil nicht lädt: OSM-Rasterkarte, grau abgedunkelt
-  document.body.classList.add('rasterdark');
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap-Mitwirkende'}).addTo(map);
-}
-const webgl = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch(_) { return false; } })();
-if (window.maplibregl && L.maplibreGL && webgl) {
+// Rückfallebene, wenn der OpenFreeMap-Stil nicht lädt: OSM-Rasterkarte, grau und invertiert
+const RASTER = {version:8, sources:{osm:{type:'raster', tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, maxzoom:19,
+  attribution:'&copy; OpenStreetMap-Mitwirkende'}},
+  layers:[{id:'osm', type:'raster', source:'osm', paint:{'raster-saturation':-1, 'raster-brightness-min':.85, 'raster-brightness-max':.08, 'raster-contrast':-.1}}]};
+let map;
+try {
+  map = new maplibregl.Map({container:'map', center:[10.45, 51.16], zoom:5, maxZoom:19, maxPitch:60,
+    style:{version:8, sources:{}, layers:[{id:'bg', type:'background', paint:{'background-color':MAPCOL.bg}}]},
+    attributionControl:{compact:true},
+    dragRotate:false, pitchWithRotate:false, touchPitch:false});
+  map.touchZoomRotate.disableRotation();
   fetch('https://tiles.openfreemap.org/styles/liberty').then(r => r.json())
-    .then(st => L.maplibreGL({style: darkStyle(st),
-      attribution:'&copy; <a href="https://openfreemap.org">OpenFreeMap</a> &copy; OpenMapTiles &copy; OpenStreetMap-Mitwirkende'}).addTo(map))
-    .catch(rasterFallback);
-} else rasterFallback();
-// Geplante Route (Navigation) – vor der gefahrenen Strecke angelegt, damit sie darunter liegt
-const routeLine = L.polyline([], {color:'#4ea1ff', weight:7, opacity:.7}).addTo(map);
-const destMarker = L.circleMarker([0,0], {radius:7, color:'#fff', weight:2, fillColor:'#4ea1ff', fillOpacity:1});
+    .then(st => map.setStyle(darkStyle(st), {diff:false}))
+    .catch(() => map.setStyle(RASTER, {diff:false}));
+} catch(e) {   // ohne WebGL läuft die Karte nicht, der Tacho schon
+  $0('map').innerHTML = '<div class="nomap">Karte nicht verfügbar (WebGL fehlt)</div>';
+  map = null;
+}
+function $0(id){ return document.getElementById(id); }
+
+// Eigene Ebenen (Route, gefahrene Strecke, Routenvorschläge, angesehene Fahrt). Daten liegen in OV und werden
+// nach jedem Stilwechsel neu eingehängt.
+const EMPTY = {type:'FeatureCollection', features:[]};
+const OV = {route:EMPTY, track:EMPTY, alts:EMPTY, ride:EMPTY};
+const lineFC = (lines, props) => ({type:'FeatureCollection', features: lines.filter(l => l.length > 1).map(l =>
+  ({type:'Feature', properties: props || {}, geometry:{type:'LineString', coordinates: l.map(p => [p[1], p[0]])}}))});
+function setOv(id, fc){ OV[id] = fc; const s = map && map.getSource(id); if (s) s.setData(fc); }
+function addOverlays(){
+  if (map.getSource('route')) return;
+  for (const id in OV) map.addSource(id, {type:'geojson', data:OV[id]});
+  const L = (id, source, paint, layout) => map.addLayer({id, type:'line', source, paint, layout:Object.assign({'line-cap':'round', 'line-join':'round'}, layout)});
+  L('route-casing', 'route', {'line-color':'#0e1116', 'line-width':11, 'line-opacity':.8});
+  L('route', 'route', {'line-color':'#4ea1ff', 'line-width':7, 'line-opacity':.85});
+  L('track', 'track', {'line-color':'#3ddc97', 'line-width':5, 'line-opacity':.9});
+  const sel = ['==', ['get', 'sel'], 1];
+  L('alt-casing', 'alts', {'line-color':'#0e1116', 'line-width':11, 'line-opacity':['case', sel, .9, 0]}, {'line-sort-key':['get', 'sel']});
+  L('alt-line', 'alts', {'line-color':['get', 'color'], 'line-width':['case', sel, 7, 4], 'line-opacity':['case', sel, 1, .4]}, {'line-sort-key':['get', 'sel']});
+  L('alt-hit', 'alts', {'line-color':'#000', 'line-width':26, 'line-opacity':0});   // breite unsichtbare Fläche zum Antippen
+  L('ride', 'ride', {'line-color':'#f0b429', 'line-width':5, 'line-opacity':.95});
+}
+if (map) map.on('style.load', () => {
+  addOverlays();
+  // Quellenangabe nur als kleines ⓘ (antippen klappt sie auf); MapLibre klappt sie bei neuen Quellen wieder auf
+  map.once('idle', () => { const a = document.querySelector('.maplibregl-ctrl-attrib'); if (a) a.classList.remove('maplibregl-compact-show'); });
+});
+
+// Marker: Ziel und eigene Position (flach auf der Karte, dreht sich mit der Fahrtrichtung)
+const destEl = document.createElement('div'); destEl.className = 'destpt';
+const destMarker = map ? new maplibregl.Marker({element:destEl}) : null;
+const meEl = document.createElement('div'); meEl.className = 'me';
+meEl.innerHTML = '<svg viewBox="-22 -22 44 44"><path d="M0,-18 L14,14 L0,6 L-14,14 Z" fill="#3ddc97" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
+const me = map ? new maplibregl.Marker({element:meEl, rotationAlignment:'map', pitchAlignment:'map'}) : null;
+let meOn = false, destOn = false;
+function showDest(d){ if (!map) return; destMarker.setLngLat([d.lon, d.lat]); if (!destOn) { destMarker.addTo(map); destOn = true; } }
+function hideDest(){ if (destOn) { destMarker.remove(); destOn = false; } }
+
+// Ausschnitt auf Punkte ([lat, lon]) einpassen – dafür flach und nordwärts
+function boundsOf(lines){
+  const b = new maplibregl.LngLatBounds();
+  for (const l of lines) for (const p of l) b.extend([p[1], p[0]]);
+  return b;
+}
+function fitPts(lines, pad){
+  if (!map || !lines.some(l => l.length)) return;
+  map.stop();
+  map.jumpTo({pitch:0, bearing:0, padding:{top:0, bottom:0, left:0, right:0}});
+  map.fitBounds(boundsOf(lines), {padding:pad, maxZoom:17, duration:600});
+}
+
 // Strecke in Abschnitten: nach jeder Pause beginnt ein neuer (keine gerade Linie über die Pause)
-const track = L.polyline([[]], {color:'#3ddc97', weight:5, opacity:.9}).addTo(map);
-const me = L.circleMarker([0,0], {radius:8, color:'#fff', weight:3, fillColor:'#3ddc97', fillOpacity:1});
+let trackSegs = [[]];
+const drawTrack = () => setOv('track', lineFC(trackSegs));
 function addPoint(pt, newSeg){
-  const segs = track.getLatLngs();
-  let seg = segs[segs.length-1];
-  if (newSeg && seg.length) { seg = []; segs.push(seg); }
-  track.addLatLng([pt.lat, pt.lon], seg);
+  let seg = trackSegs[trackSegs.length-1];
+  if (newSeg && seg.length) { seg = []; trackSegs.push(seg); }
+  seg.push([pt.lat, pt.lon]);
+  drawTrack();
   rec.push([+pt.lat.toFixed(6), +pt.lon.toFixed(6), Math.round(pt.t / 1000), pt.ele == null ? null : Math.round(pt.ele), newSeg ? 1 : 0]);
 }
 // Aufzeichnung für Fahrtenliste/GPX: [lat, lon, Zeit (s), Höhe (m) | null, 1 = neuer Abschnitt]
 let rec = [];
-const trackPoints = () => track.getLatLngs().reduce((n, s) => n + s.length, 0);
+const trackPoints = () => trackSegs.reduce((n, s) => n + s.length, 0);
+
+// ---- Kamera: folgt der Position. Mit Navigation 3D von hinten (gekippt, Fahrtrichtung oben, man selbst im unteren Drittel),
+// ohne Navigation flach und nordwärts wie bisher.
+let camBearing = 0;          // aktuelle Fahrtrichtung (Grad)
+let navZoom = 16.5;          // Zoom der Navi-Ansicht; per Zwei-Finger-Zoom änderbar
+function camUpdate(anim){
+  if (!map || !follow || !last) return;
+  const center = [last.lon, last.lat], dur = anim ? 1000 : 0;
+  if (nav && !pick) {
+    const h = map.getContainer().clientHeight;
+    map.easeTo({center, zoom:navZoom, bearing:camBearing, pitch:58, duration:dur, easing:t => t,
+      padding:{top:Math.round(h * .5), bottom:0, left:0, right:0}});
+  } else {
+    map.easeTo({center, zoom:Math.max(map.getZoom(), 15), bearing:0, pitch:0, duration:dur, easing:t => t,
+      padding:{top:0, bottom:0, left:0, right:0}});
+  }
+  const arrow = !!nav && !pick;
+  meEl.classList.toggle('arrow', arrow);
+  me.setRotation(arrow ? camBearing : 0);
+}
+const brg = (a, b) => { const r = Math.PI / 180;
+  return (Math.atan2((b[1] - a[1]) * Math.cos(a[0] * r), b[0] - a[0]) / r + 360) % 360; };
+// Punkt auf der Route bei Strecke d (m ab Start)
+function routeAt(d){
+  const pts = nav.pts, cum = nav.cum;
+  let i = Math.max(0, Math.min(nav.idx, pts.length - 2));
+  while (i > 0 && cum[i] > d) i--;
+  while (i < pts.length - 2 && cum[i+1] < d) i++;
+  const seg = cum[i+1] - cum[i], t = seg > 0 ? Math.max(0, Math.min(1, (d - cum[i]) / seg)) : 0;
+  return [pts[i][0] + t * (pts[i+1][0] - pts[i][0]), pts[i][1] + t * (pts[i+1][1] - pts[i][1])];
+}
+// Fahrtrichtung: auf der Route deren Verlauf (25 m vorausgeschaut, damit die Ansicht ruhig bleibt), sonst GPS-Kurs
+function updateBearing(c){
+  if (nav && !routing && offCount < 3 && nav.pts.length > 1) {
+    const a = routeAt(nav.along), b = routeAt(nav.along + 25);
+    if (a[0] !== b[0] || a[1] !== b[1]) { camBearing = brg(a, b); return; }
+  }
+  if (c && c.heading != null && isFinite(c.heading) && (c.speed || 0) > 1.5) camBearing = c.heading;
+}
 
 // ---- Zustand ----
 let watchId = null, running = false, follow = true;
@@ -340,8 +435,7 @@ function onPos(p){
   $('status').textContent = `GPS ±${Math.round(c.accuracy)} m`;
   updateAlt(c);
 
-  me.setLatLng([pt.lat, pt.lon]); if (!map.hasLayer(me)) me.addTo(map);
-  if (follow) map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 16));
+  if (me) { me.setLngLat([pt.lon, pt.lat]); if (!meOn) { me.addTo(map); meOn = true; } }
 
   let kmh = smoothSpeed(rawSpeed(c, last, pt));
   if (kmh < 1.5) kmh = 0;
@@ -360,6 +454,8 @@ function onPos(p){
   window._kmh = kmh;
   render(kmh);
   updateNav(pt, c.accuracy);
+  updateBearing(c);
+  camUpdate(true);
   save();
 }
 
@@ -368,7 +464,7 @@ function save(){
   try {
     localStorage.setItem('ride', JSON.stringify({
       distM, maxKmh, movingMs, running, climbM, descM, rec,
-      track: track.getLatLngs().map(s => s.map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6)]))
+      track: trackSegs.map(s => s.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)]))
     }));
   } catch(_) {}
 }
@@ -380,8 +476,8 @@ function restore(){
     climbM = r.climbM || 0; descM = r.descM || 0; rec = r.rec || [];
     let segs = r.track || [];
     if (segs.length && typeof segs[0][0] === 'number') segs = [segs];  // altes Format: eine flache Liste
-    track.setLatLngs(segs.length ? segs : [[]]);
-    if (trackPoints()) map.fitBounds(track.getBounds(), {padding:[20,20]});
+    trackSegs = segs.length ? segs : [[]]; drawTrack();
+    if (trackPoints()) fitPts(trackSegs, 20);
     if (movingMs > 0) { $('startBtn').textContent = 'Weiter'; }
     render(0);
   } catch(_) {}
@@ -447,9 +543,10 @@ $('startBtn').onclick = () => {
   keepAwake(running);
   $('startBtn').textContent = running ? 'Pause' : 'Weiter';
   $('startBtn').classList.toggle('pause', running);
+  if (running) { follow = true; camUpdate(true); }
   save();
 };
-$('centerBtn').onclick = () => { follow = true; if (last) map.setView([last.lat, last.lon], 16); };
+$('centerBtn').onclick = () => { follow = true; if (map && !nav) map.setZoom(15); camUpdate(true); };
 $('resetBtn').onclick = async () => {
   const worth = distM >= 50 && rec.length > 1;
   if (!confirm(worth ? 'Fahrt beenden und speichern?' : 'Fahrt beenden? (zu kurz zum Speichern)')) return;
@@ -459,14 +556,18 @@ $('resetBtn').onclick = async () => {
     catch(e) { alert('Speichern fehlgeschlagen: ' + e.message); return; }
   }
   rec = [];
-  distM = 0; maxKmh = 0; movingMs = 0; track.setLatLngs([[]]); newSeg = true;
+  distM = 0; maxKmh = 0; movingMs = 0; trackSegs = [[]]; drawTrack(); newSeg = true;
   climbM = 0; descM = 0; altRef = null; lastGood = null; spdHist = [];
   running = false; keepAwake(false);
   $('startBtn').textContent = 'Start'; $('startBtn').classList.remove('pause');
   render(0);
   save();
 };
-map.on('dragstart', () => follow = false);
+if (map) {
+  map.on('dragstart', () => follow = false);
+  // eigener Zoom in der Navi-Ansicht bleibt erhalten
+  map.on('zoomend', e => { if (e.originalEvent && nav && follow) navZoom = map.getZoom(); });
+}
 setInterval(() => { if (running) save(); }, 5000);
 
 // ---- Navigation: Fahrradroute (FOSSGIS/OSRM) + Adresssuche (Nominatim), beides kostenlos ohne Key ----
@@ -474,7 +575,7 @@ setInterval(() => { if (running) save(); }, 5000);
 const VALHALLA = 'https://valhalla1.openstreetmap.de/route?json=';
 const ROUTER = 'https://routing.openstreetmap.de/routed-bike/route/v1/driving/';
 const ALTCOL = ['#4ea1ff', '#f0b429', '#c678dd', '#56d4dd', '#ff7b72'];
-const altLayer = L.layerGroup().addTo(map);   // Routenvorschläge während der Auswahl
+const clearAlts = () => { setOv('alts', EMPTY); setOv('ride', EMPTY); };   // Routenvorschläge / angesehene Fahrt ausblenden
 const GEOCODER = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=de&q=';
 let nav = null;          // {mode:'route'|'gpx', dest:{lat,lon,name}, pts:[[lat,lon]], steps:[{d,a,t}], cum, total, idx, along}
 let pendingDest = null;  // Ziel gewählt, aber noch keine GPS-Position
@@ -528,19 +629,21 @@ function setNav(n, fit){
   n.cum = cumDist(n.pts);
   n.total = n.cum[n.cum.length-1]; n.idx = 0; n.along = 0;
   nav = n; offCount = 0;
-  routeLine.setLatLngs(n.pts);
-  destMarker.setLatLng([n.dest.lat, n.dest.lon]); if (!map.hasLayer(destMarker)) destMarker.addTo(map);
+  setOv('route', lineFC([n.pts]));
+  showDest(n.dest);
   try { localStorage.setItem('nav', JSON.stringify({mode:n.mode, dest:n.dest, steps:n.steps, profile:n.profile,
     pts:n.pts.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)])})); } catch(_) {}
-  if (fit) { follow = running; map.fitBounds(routeLine.getBounds(), {padding:[40,40]}); }
-  if (last) updateNav(last, 0);
+  // Beim Fahren direkt in die 3D-Ansicht, sonst erst Überblick über die ganze Route (Start/Zentrieren → 3D)
+  if (fit) { follow = running && !!last; if (!follow) fitPts([n.pts], 40); }
+  if (last) { updateNav(last, 0); updateBearing(null); camUpdate(true); }
   else navShow('↑', '', n.mode === 'gpx' ? 'GPX-Route geladen' : 'Route berechnet', `${fmtDist(n.total)} · warte auf GPS`);
 }
 
 function endNav(){
   nav = null; pendingDest = null;
-  routeLine.setLatLngs([]); if (map.hasLayer(destMarker)) map.removeLayer(destMarker);
+  setOv('route', EMPTY); hideDest();
   $('navBar').hidden = true;
+  camUpdate(true);   // zurück in die flache Ansicht
   try { localStorage.removeItem('nav'); } catch(_) {}
 }
 
@@ -683,14 +786,11 @@ async function planRoutes(dest, from){
   if (routes.length === 1) { useRoute(routes[0], dest); return; }
   const fewest = routes.reduce((m, r) => r.turns < m.turns ? r : m, routes[0]);
   $('navBar').hidden = true; $('menu').hidden = true;
-  altLayer.clearLayers();
-  destMarker.setLatLng([dest.lat, dest.lon]); if (!map.hasLayer(destMarker)) destMarker.addTo(map);
+  clearAlts();
+  showDest(dest);
   const list = $('routeList'); list.textContent = '';
   routes.forEach((r, i) => {
     r.color = ALTCOL[i % ALTCOL.length];
-    r.casing = L.polyline(r.pts, {color:'#0e1116', weight:11, opacity:0}).addTo(altLayer);   // dunkler Rand der gewählten Route
-    r.line = L.polyline(r.pts, {color:r.color, weight:5, opacity:.45}).addTo(altLayer);
-    r.line.on('click', () => pickRoute(i));
     const tags = [i === 0 ? 'Kürzeste' : null, r === fewest && i !== 0 ? 'Wenigste Abbiegungen' : null].filter(Boolean);
     const li = document.createElement('li'); li.style.setProperty('--c', r.color);
     li.innerHTML = `<span class="sw" style="background:${r.color}"></span><div><div class="m"></div><div class="s"></div></div>`;
@@ -708,24 +808,20 @@ async function planRoutes(dest, from){
 let pick = null;
 function pickRoute(i){
   pick.sel = i;
-  pick.routes.forEach((r, k) => {
-    const on = k === i;
-    r.line.setStyle({weight: on ? 7 : 4, opacity: on ? 1 : .4});
-    r.casing.setStyle({opacity: on ? .9 : 0});
-    $('routeList').children[k].classList.toggle('sel', on);
-  });
-  pick.routes[i].casing.bringToFront(); pick.routes[i].line.bringToFront();
-  map.fitBounds(pick.routes[i].line.getBounds(),
-    {paddingTopLeft:[30, 30], paddingBottomRight:[30, $('routePick').offsetHeight + 24]});
+  pick.routes.forEach((r, k) => $('routeList').children[k].classList.toggle('sel', k === i));
+  setOv('alts', {type:'FeatureCollection', features: pick.routes.map((r, k) => lineFC([r.pts], {i:k, color:r.color, sel: k === i ? 1 : 0}).features[0])});
+  fitPts([pick.routes[i].pts], {top:30, left:30, right:30, bottom:$('routePick').offsetHeight + 24});
 }
+if (map) map.on('click', 'alt-hit', e => { if (pick && e.features.length) pickRoute(e.features[0].properties.i); });
 function useRoute(r, dest){
-  altLayer.clearLayers(); $('routePick').hidden = true; pick = null;
+  clearAlts(); $('routePick').hidden = true; pick = null;
   setNav({mode:'route', dest, steps: r.steps, pts: r.pts, profile: r.profile}, true);
 }
 $('routeGo').onclick = () => { if (pick) useRoute(pick.routes[pick.sel], pick.dest); };
 $('routeCancel').onclick = () => {
-  altLayer.clearLayers(); $('routePick').hidden = true; pick = null; $('navBar').hidden = !nav;
-  if (!nav && map.hasLayer(destMarker)) map.removeLayer(destMarker);
+  clearAlts(); $('routePick').hidden = true; pick = null; $('navBar').hidden = !nav;
+  if (nav) showDest(nav.dest); else hideDest();
+  follow = true; camUpdate(true);
 };
 
 // Position auf die Route projizieren: nächster Punkt auf der Linie + gefahrene Strecke entlang der Route
@@ -751,7 +847,8 @@ function updateNav(pt, acc){
   const p = project(pt.lat, pt.lon);
   if (acc < 30) {
     if (p.dist > 40) offCount++;
-    else { offCount = 0; nav.idx = p.i; nav.along = p.along; }
+    else { offCount = 0; nav.idx = p.i; nav.along = p.along;
+      setOv('route', lineFC([[routeAt(nav.along), ...nav.pts.slice(nav.idx + 1)]])); }   // nur noch der Rest der Route
   }
   const rest = Math.max(0, nav.total - nav.along);
   if (rest < 25) {
@@ -813,10 +910,10 @@ function showView(v, push){
   if (v === 'topfix') showDiag();
 }
 function openMenu(){ mStack = []; $('menu').hidden = false; showView('main'); }
-function closeMenu(){ $('menu').hidden = true; altLayer.clearLayers(); }
+function closeMenu(){ $('menu').hidden = true; clearAlts(); }
 $('menuBtn').onclick = () => $('menu').hidden ? openMenu() : closeMenu();
 $('mClose').onclick = closeMenu;
-$('mBack').onclick = () => { mStack.pop(); altLayer.clearLayers(); showView(mStack[mStack.length-1], false); };
+$('mBack').onclick = () => { mStack.pop(); clearAlts(); showView(mStack[mStack.length-1], false); };
 document.querySelectorAll('#menu .mi[data-go]').forEach(b => b.onclick = () => showView(b.dataset.go));
 $('mNavEnd').onclick = () => { endNav(); closeMenu(); };
 document.querySelectorAll('#menu .mi[data-fix]').forEach(b => {
@@ -833,7 +930,6 @@ function showDiag(){
   probe.remove();
   const cv = document.querySelector('.maplibregl-canvas'), vv = window.visualViewport;
   const r = cv ? cv.getBoundingClientRect() : null, mw = $('map').getBoundingClientRect();
-  const gl = cv && cv.closest('.leaflet-gl-layer');
   $('diag').textContent = [
     `App-Modus: ${navigator.standalone ? 'ja' : 'nein'} · Variante ${document.documentElement.getAttribute('data-topfix')}`,
     `Fenster: ${innerWidth}×${innerHeight} · Bildschirm ${screen.width}×${screen.height} · DPR ${devicePixelRatio}`,
@@ -841,14 +937,12 @@ function showDiag(){
     `Safe-Area o/r/u/l: ${safe}`,
     `Karte: y ${mw.top.toFixed(2)} h ${mw.height.toFixed(2)}`,
     cv ? `Canvas: ${cv.width}×${cv.height} px, CSS ${r.width.toFixed(2)}×${r.height.toFixed(2)} @ ${r.left.toFixed(2)},${r.top.toFixed(2)}` : 'Canvas: – (Rasterkarte)',
-    gl ? `GL-Ebene: ${getComputedStyle(gl).transform}` : '',
-    `Kartenebene: ${getComputedStyle(document.querySelector('.leaflet-map-pane')).transform}`,
   ].filter(Boolean).join('\n');
 }
 
 // ---- Ziel ----
 function chooseDest(dest){
-  closeMenu(); map.closePopup();
+  closeMenu(); closePopup();
   addRecent(dest);
   if (last) planRoutes(dest, last);
   else { pendingDest = dest; navShow('…', '', 'Warte auf GPS', dest.name || ''); }
@@ -951,11 +1045,11 @@ function showRide(r){
   showView('ride');
   $('mTitle').textContent = fmtDate(r.start);
   // Strecke auf der Karte zeigen (oberhalb des Menüs)
-  altLayer.clearLayers();
+  clearAlts();
   const segs = []; for (const p of r.rec) { if (p[4] || !segs.length) segs.push([]); segs[segs.length-1].push([p[0], p[1]]); }
-  const line = L.polyline(segs, {color:'#f0b429', weight:5, opacity:.95}).addTo(altLayer);
+  setOv('ride', lineFC(segs));
   follow = false;
-  map.fitBounds(line.getBounds(), {paddingTopLeft:[30, 30], paddingBottomRight:[30, $('menu').offsetHeight + 24]});
+  fitPts(segs, {top:30, left:30, right:30, bottom:$('menu').offsetHeight + 24});
 }
 function rideGpx(r){
   const iso = s => new Date(s * 1000).toISOString();
@@ -983,7 +1077,7 @@ $('rideShare').onclick = () => { if (curRide) shareFile(`Radfahrt-${new Date(cur
 $('rideFollow').onclick = () => { if (curRide) followPts(curRide.rec.map(p => [p[0], p[1]]), 'Fahrt vom ' + fmtDate(curRide.start)); };
 $('rideDel').onclick = async () => {
   if (!curRide || !confirm('Diese Fahrt löschen?')) return;
-  await DB.del('rides', curRide.id); curRide = null; altLayer.clearLayers();
+  await DB.del('rides', curRide.id); curRide = null; clearAlts();
   mStack.pop(); showView('rides', false);
 };
 
@@ -1016,11 +1110,28 @@ async function showStats(){
 }
 
 // Langes Drücken auf die Karte (bzw. Rechtsklick am PC) → Ziel setzen
-map.on('contextmenu', e => {
+let popup = null;
+function closePopup(){ if (popup) { popup.remove(); popup = null; } }
+function destPopup(at){
+  closePopup();
   const b = document.createElement('button'); b.textContent = 'Hierhin navigieren';
-  b.onclick = () => chooseDest({lat:e.latlng.lat, lon:e.latlng.lng, name:'Punkt auf der Karte'});
-  L.popup({closeButton:false}).setLatLng(e.latlng).setContent(b).openOn(map);
-});
+  b.onclick = () => chooseDest({lat:at.lat, lon:at.lng, name:'Punkt auf der Karte'});
+  popup = new maplibregl.Popup({closeButton:false}).setLngLat(at).setDOMContent(b).addTo(map);
+}
+if (map) {
+  map.on('contextmenu', e => destPopup(e.lngLat));
+  // iOS meldet langes Drücken nicht als contextmenu → selbst erkennen (ein Finger, 600 ms, kaum bewegt)
+  let lpTimer = null, lpAt = null;
+  map.on('touchstart', e => {
+    clearTimeout(lpTimer);
+    if (e.originalEvent.touches.length !== 1) return;
+    lpAt = e.point; const at = e.lngLat;
+    lpTimer = setTimeout(() => destPopup(at), 600);
+  });
+  map.on('touchmove', e => { if (lpAt && e.point.dist(lpAt) > 10) clearTimeout(lpTimer); });
+  map.on('touchend', () => clearTimeout(lpTimer));
+  map.on('touchcancel', () => clearTimeout(lpTimer));
+}
 function restoreNav(){
   try { const n = JSON.parse(localStorage.getItem('nav') || 'null'); if (n && n.pts && n.pts.length > 1) setNav(n, false); } catch(_) {}
 }
