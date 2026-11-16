@@ -42,7 +42,7 @@ async def main():
         pg.on('dialog', lambda d: asyncio.ensure_future(d.accept()))
         await pg.add_init_script(FAKE)
         await pg.goto('http://localhost:8765/'); await pg.wait_for_timeout(2500)
-        await pg.click('#menuBtn'); await pg.click('[data-go=pm]'); await pg.click('#pmConn'); await pg.wait_for_timeout(2500)
+        await pg.click('#menuBtn'); await pg.click('[data-go=pm]'); await pg.click('#pmLayBtn'); await pg.click('#pmConn'); await pg.wait_for_timeout(2500)
         print('Filter:', await pg.evaluate('JSON.stringify(_req)'), '| Status', await pg.inner_text('#pmStateV'),
               '| Gerät', await pg.inner_text('#pmNameV'), '| jetzt', await pg.inner_text('#pmNowV'), '| Menü', await pg.inner_text('#pmMenu'))
         await pg.screenshot(path=T+r'\pm_menu.png')

@@ -52,7 +52,9 @@
   .cell .v small{font-size:11px;color:var(--muted);font-family:Inter,sans-serif}
   /* Start/Pause so breit wie eine Wertespalte, rechts daneben immer Watt (3 s) und Kadenz (ohne Powermeter "--", Antippen = Powermeter-Menü) */
   .btns{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-  .btns .cell{display:flex;flex-direction:column;justify-content:center;cursor:pointer}
+  .btns .cell{display:flex;flex-direction:column;justify-content:center}
+  /* Layout fest per Schalter (Menü → Powermeter): mit = Watt/Kadenz, ohne = Steigung/Gesamtzeit. Schaltet nie von selbst um. */
+  .btns .cell.pwc{display:none;cursor:pointer} .btns.pwlay .cell.pwc{display:flex} .btns.pwlay .cell.alt{display:none}
   button{font:600 15px Inter,sans-serif;border:0;border-radius:10px;padding:12px 8px;cursor:pointer;color:var(--bg);background:var(--accent)}
   button.sec{background:var(--panel);color:var(--text);border:1px solid var(--line)}
   button.pause{background:var(--warn)}
@@ -202,6 +204,7 @@
     <div class="mview" data-v="pm" data-t="Powermeter" hidden>
       <div class="kv"><div><b id="pmStateV">aus</b><span>Status</span></div><div><b id="pmNameV">–</b><span>Gerät</span></div><div><b id="pmNowV">–</b><span>Watt 3 s</span></div>
         <div><b id="pwAvg">–</b><span>Ø Watt Fahrt</span></div><div><b id="pwMaxV">–</b><span>Max W (3 s)</span></div><div><b id="cadAvgV">–</b><span>Ø Kadenz</span></div></div>
+      <button class="mi" id="pmLayBtn">Watt &amp; Kadenz unten anzeigen: aus</button>
       <div class="mrow two" id="pmBtns"><button id="pmConn">Verbinden</button><button class="sec" id="pmDisc">Trennen</button></div>
       <div class="navhint" style="text-align:left">Powermeter mit Bluetooth (Leistungsmesser-Standard) – Pedale, Kurbel oder Nabe kurz antreten, damit er aufwacht. Nur-ANT+-Geräte gehen am iPhone nicht.</div>
       <div id="pmNoBt" hidden>
@@ -234,8 +237,10 @@
   </div>
   <div class="btns" id="btns">
     <button id="startBtn">Start</button>
-    <div class="cell"><div class="l">Watt</div><div class="v" id="pw3">-- <small>W</small></div></div>
-    <div class="cell"><div class="l">Kadenz</div><div class="v" id="cad">-- <small>rpm</small></div></div>
+    <div class="cell pwc"><div class="l">Watt</div><div class="v" id="pw3">-- <small>W</small></div></div>
+    <div class="cell pwc"><div class="l">Kadenz</div><div class="v" id="cad">-- <small>rpm</small></div></div>
+    <div class="cell alt"><div class="l">Steigung</div><div class="v" id="grade">-- <small>%</small></div></div>
+    <div class="cell alt"><div class="l">Gesamtzeit</div><div class="v" id="total">0:00:00</div></div>
   </div>
   <div class="status"><span class="dot" id="dot"></span><span id="status">Bereit</span></div>
 </div>
@@ -518,6 +523,27 @@ function haversine(a, b){
   return 2*R*Math.asin(Math.sqrt(x));
 }
 
+// Steigung: Höhenänderung (geglättete GPS-Höhe) über die letzten ~150 m Strecke, erst ab 50 m Messstrecke
+let gradeHist = [], gradePct = null;
+function updateGrade(){
+  if (altSmooth == null) return;
+  gradeHist.push({d:distM, a:altSmooth});
+  while (gradeHist.length > 2 && distM - gradeHist[1].d >= 150) gradeHist.shift();
+  const f = gradeHist[0], span = distM - f.d;
+  gradePct = span >= 50 ? Math.max(-30, Math.min(30, (altSmooth - f.a) / span * 100)) : null;
+  $('grade').innerHTML = (gradePct == null ? '--' : gradePct.toFixed(1)) + ' <small>%</small>';
+}
+// Gesamtzeit: ab erstem Start der Fahrt inkl. Pausen
+let rideT0 = 0;
+const showTotal = () => $('total').textContent = fmtTime(rideT0 ? Date.now() - rideT0 : 0);
+// Layout unten: per Schalter gemerkt (localStorage pmLayout), wechselt nie automatisch
+let pmLay = false;
+try { pmLay = localStorage.getItem('pmLayout') === '1'; } catch(_) {}
+function applyLay(){
+  $('btns').classList.toggle('pwlay', pmLay);
+  $('pmLayBtn').textContent = 'Watt & Kadenz unten anzeigen: ' + (pmLay ? 'an' : 'aus');
+}
+
 function render(kmh){
   $('speed').textContent = kmh.toFixed(1);
   $('dist').innerHTML = (distM/1000).toFixed(2) + ' <small>km</small>';
@@ -576,7 +602,7 @@ function onPos(p){
     } else {
       // Distanz ab dem letzten Streckenpunkt: Stillstand-Rauschen (< 3 m) und Sprünge (> 90 km/h) ignorieren
       const d = haversine(lastGood, pt), dt = (pt.t - lastGood.t) / 1000;
-      if (d > 3 && dt > 0 && d / dt * 3.6 < 90) { distM += d; addPoint(pt); lastGood = pt; }
+      if (d > 3 && dt > 0 && d / dt * 3.6 < 90) { distM += d; addPoint(pt); lastGood = pt; updateGrade(); }
     }
     if (kmh > maxKmh) maxKmh = kmh;
   }
@@ -593,7 +619,7 @@ function onPos(p){
 function save(){
   try {
     localStorage.setItem('ride', JSON.stringify({
-      distM, maxKmh, movingMs, running, climbM, descM, rec, pwSum, pwN, pwMax, cadSum, cadN,
+      distM, maxKmh, movingMs, running, climbM, descM, rec, pwSum, pwN, pwMax, cadSum, cadN, rideT0,
       track: trackSegs.map(s => s.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)]))
     }));
   } catch(_) {}
@@ -605,6 +631,7 @@ function restore(){
     distM = r.distM || 0; maxKmh = r.maxKmh || 0; movingMs = r.movingMs || 0;
     climbM = r.climbM || 0; descM = r.descM || 0; rec = r.rec || [];
     pwSum = r.pwSum || 0; pwN = r.pwN || 0; pwMax = r.pwMax || 0; cadSum = r.cadSum || 0; cadN = r.cadN || 0;
+    rideT0 = r.rideT0 || (rec.length ? rec[0][2] * 1000 : 0); showTotal();
     let segs = r.track || [];
     if (segs.length && typeof segs[0][0] === 'number') segs = [segs];  // altes Format: eine flache Liste
     trackSegs = segs.length ? segs : [[]]; drawTrack();
@@ -689,11 +716,12 @@ setInterval(() => {
   renderPw();
   $('clock').textContent = new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
   if (running) $('time').textContent = fmtTime(movingMs);
+  showTotal();
 }, 1000);
 
 $('startBtn').onclick = () => {
   running = !running;
-  if (running) { newSeg = true; spdHist = []; }
+  if (running) { newSeg = true; spdHist = []; gradeHist = []; if (!rideT0) rideT0 = Date.now(); }
   startGps();
   keepAwake(running);
   $('startBtn').textContent = running ? 'Pause' : 'Weiter';
@@ -717,6 +745,7 @@ async function endRide(){
   distM = 0; maxKmh = 0; movingMs = 0; trackSegs = [[]]; drawTrack(); newSeg = true;
   climbM = 0; descM = 0; altRef = null; lastGood = null; spdHist = [];
   pwSum = 0; pwN = 0; pwMax = 0; cadSum = 0; cadN = 0;
+  rideT0 = 0; gradeHist = []; gradePct = null; $('grade').innerHTML = '-- <small>%</small>'; showTotal();
   running = false; keepAwake(false);
   $('startBtn').textContent = 'Start'; $('startBtn').classList.remove('pause');
   render(0); renderPw();
@@ -1330,7 +1359,13 @@ function restoreNav(){
   try { const n = JSON.parse(localStorage.getItem('nav') || 'null'); if (n && n.pts && n.pts.length > 1) setNav(n, false); } catch(_) {}
 }
 
-document.querySelectorAll('#btns .cell').forEach(c => c.onclick = () => { openMenu(); showView('pm'); });
+document.querySelectorAll('#btns .cell.pwc').forEach(c => c.onclick = () => { openMenu(); showView('pm'); });
+$('pmLayBtn').onclick = () => {
+  pmLay = !pmLay;
+  try { localStorage.setItem('pmLayout', pmLay ? '1' : '0'); } catch(_) {}
+  applyLay();
+};
+applyLay();
 $('pmConn').onclick = pmPick;
 $('pmDisc').onclick = pmOff;
 $('pmCopy').onclick = async () => {
