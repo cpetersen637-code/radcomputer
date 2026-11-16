@@ -52,7 +52,7 @@
   .cell .v small{font-size:11px;color:var(--muted);font-family:Inter,sans-serif}
   /* Start/Pause; mit Powermeter rechts daneben Watt (3 s) und Kadenz */
   .btns{display:grid;grid-template-columns:1fr;gap:6px}
-  .btns.pw{grid-template-columns:2fr 1fr 1fr}
+  .btns.pw{grid-template-columns:repeat(3,1fr)}   /* Start so breit wie eine Wertespalte (z. B. Max) */
   .btns .cell{display:none} .btns.pw .cell{display:flex;flex-direction:column;justify-content:center}
   button{font:600 15px Inter,sans-serif;border:0;border-radius:10px;padding:12px 8px;cursor:pointer;color:var(--bg);background:var(--accent)}
   button.sec{background:var(--panel);color:var(--text);border:1px solid var(--line)}
