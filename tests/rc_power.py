@@ -33,7 +33,7 @@ async def main():
         await pg.goto('http://localhost:8765/'); await pg.wait_for_timeout(2000)
         await pg.click('#menuBtn'); await pg.click('[data-go=pm]'); await pg.wait_for_timeout(300)
         print('ohne BT: Hinweis sichtbar', await pg.is_visible('#pmNoBt'), '| Buttons sichtbar', await pg.is_visible('#pmBtns'),
-              '| URL', await pg.inner_text('#pmUrl'), '| Watt-Zeile', await pg.evaluate("$('btns').classList.contains('pw')"))
+              '| URL', await pg.inner_text('#pmUrl'), '| Watt-Zeile', await pg.is_visible('#pw3'))
         await pg.screenshot(path=T+r'\pm_nobt.png'); await ctx.close()
 
         # 2) Mit simuliertem Powermeter
@@ -71,10 +71,10 @@ async def main():
         avg_before = await pg.inner_text('#pwAvg')
         await pg.evaluate('clearInterval(_sim); save()')
         await pg.reload(); await pg.wait_for_timeout(2500)
-        print('nach Neuladen: Ø', await pg.inner_text('#pwAvg'), '(vorher', avg_before + ') | Zeile sichtbar', await pg.evaluate("$('btns').classList.contains('pw')"), '| 3s', await pg.inner_text('#pw3'))
+        print('nach Neuladen: Ø', await pg.inner_text('#pwAvg'), '(vorher', avg_before + ') | Zeile sichtbar', await pg.is_visible('#pw3'), '| 3s', await pg.inner_text('#pw3'))
         # Beenden → gespeicherte Fahrt mit Leistung
         await pg.evaluate('distM = 200'); await pg.evaluate('endRide()'); await pg.wait_for_timeout(800)
-        print('nach Beenden Zeile sichtbar:', await pg.evaluate("$('btns').classList.contains('pw')"))
+        print('nach Beenden Zeile sichtbar:', await pg.is_visible('#pw3'))
         await pg.click('#menuBtn'); await pg.click('[data-go=rides]'); await pg.wait_for_timeout(600)
         print('Liste:', (await pg.inner_text('#rideList')).replace('\n', ' | '))
         await pg.click('#rideList li'); await pg.wait_for_timeout(1200)

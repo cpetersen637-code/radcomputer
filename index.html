@@ -50,10 +50,9 @@
   .cell .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .cell .v{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:500;margin-top:2px}
   .cell .v small{font-size:11px;color:var(--muted);font-family:Inter,sans-serif}
-  /* Start/Pause; mit Powermeter rechts daneben Watt (3 s) und Kadenz */
-  .btns{display:grid;grid-template-columns:1fr;gap:6px}
-  .btns.pw{grid-template-columns:repeat(3,1fr)}   /* Start so breit wie eine Wertespalte (z. B. Max) */
-  .btns .cell{display:none} .btns.pw .cell{display:flex;flex-direction:column;justify-content:center}
+  /* Start/Pause so breit wie eine Wertespalte, rechts daneben immer Watt (3 s) und Kadenz (ohne Powermeter "--", Antippen = Powermeter-Menü) */
+  .btns{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .btns .cell{display:flex;flex-direction:column;justify-content:center;cursor:pointer}
   button{font:600 15px Inter,sans-serif;border:0;border-radius:10px;padding:12px 8px;cursor:pointer;color:var(--bg);background:var(--accent)}
   button.sec{background:var(--panel);color:var(--text);border:1px solid var(--line)}
   button.pause{background:var(--warn)}
@@ -446,7 +445,6 @@ function pmData(dv){
   renderPw();
 }
 function renderPw(){
-  $('btns').classList.toggle('pw', !!PM.ch || pwN > 0);
   const p = pw3(), c = cadNow();
   $('pw3').innerHTML = (p == null ? '--' : Math.round(p)) + ' <small>W</small>';
   $('cad').innerHTML = (c == null ? '--' : Math.round(c)) + ' <small>rpm</small>';
@@ -1315,6 +1313,7 @@ function restoreNav(){
   try { const n = JSON.parse(localStorage.getItem('nav') || 'null'); if (n && n.pts && n.pts.length > 1) setNav(n, false); } catch(_) {}
 }
 
+document.querySelectorAll('#btns .cell').forEach(c => c.onclick = () => { openMenu(); showView('pm'); });
 $('pmConn').onclick = pmPick;
 $('pmDisc').onclick = pmOff;
 $('pmCopy').onclick = async () => {
