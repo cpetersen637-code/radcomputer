@@ -15,7 +15,7 @@ async def main():
         pg.on('dialog', lambda d: asyncio.ensure_future(d.accept()))
         await pg.goto('http://localhost:8765/?menu'); await pg.wait_for_timeout(3000)
         print('Fahrt km', await pg.evaluate(SIM))
-        await pg.click('#resetBtn'); await pg.wait_for_timeout(800)
+        await pg.evaluate('endRide()'); await pg.wait_for_timeout(800)
         print('nach Beenden Distanz:', await pg.inner_text('#dist'), 'rec', await pg.evaluate('rec.length'))
         await pg.click('#menuBtn'); await pg.wait_for_timeout(400)
         await pg.screenshot(path=T+r'\m_main.png')

@@ -11,6 +11,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
 <title>Radcomputer</title>
+<script>if (navigator.standalone || matchMedia('(display-mode: standalone)').matches) document.documentElement.classList.add('app');</script>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -23,8 +24,11 @@
   body{display:flex;flex-direction:column}
   /* Als Home-Bildschirm-App legt iOS einen Weichzeichner unter die Statusleiste, der bis in die Karte reicht:
      fester, deckender Streifen dahinter + 32 px Abstand (so auf dem iPhone getestet und scharf) */
-  body{padding-top:calc(env(safe-area-inset-top) + 32px)}
-  #topShield{position:fixed;top:0;left:0;right:0;height:calc(env(safe-area-inset-top) + 32px);background:var(--bg);z-index:5000;pointer-events:none}
+  /* Nur als Home-Bildschirm-App (Klasse "app"); im Browser (z. B. Bluefy) hat die Browserleiste ihren eigenen Platz → kein Extra-Abstand */
+  body{padding-top:env(safe-area-inset-top)}
+  #topShield{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:var(--bg);z-index:5000;pointer-events:none}
+  html.app body{padding-top:calc(env(safe-area-inset-top) + 32px)}
+  html.app #topShield{height:calc(env(safe-area-inset-top) + 32px)}
   [hidden]{display:none!important}
   #mapWrap{flex:1;min-height:30vh;position:relative;border-bottom:1px solid var(--line)}
   #map{position:absolute;inset:0;background:#161b22;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -46,7 +50,10 @@
   .cell .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .cell .v{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:500;margin-top:2px}
   .cell .v small{font-size:11px;color:var(--muted);font-family:Inter,sans-serif}
-  .btns{display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px}
+  /* Start/Pause; mit Powermeter rechts daneben Watt (3 s) und Kadenz */
+  .btns{display:grid;grid-template-columns:1fr;gap:6px}
+  .btns.pw{grid-template-columns:2fr 1fr 1fr}
+  .btns .cell{display:none} .btns.pw .cell{display:flex;flex-direction:column;justify-content:center}
   button{font:600 15px Inter,sans-serif;border:0;border-radius:10px;padding:12px 8px;cursor:pointer;color:var(--bg);background:var(--accent)}
   button.sec{background:var(--panel);color:var(--text);border:1px solid var(--line)}
   button.pause{background:var(--warn)}
@@ -56,6 +63,8 @@
   /* Navigation */
   .navbtn{position:absolute;left:10px;bottom:10px;z-index:1000;width:48px;height:44px;padding:0;display:flex;align-items:center;justify-content:center}
   .navbtn svg{width:22px;height:22px}
+  #centerBtn{left:auto;right:10px}
+  .maplibregl-ctrl-bottom-right{margin-bottom:56px}   /* Quellenangabe über den Zentrieren-Knopf */
   /* Navi-Anzeige frei auf der Karte (ohne Kachel): Mitte = nächste Abbiegung, rechts = Ziel/Rest/Ankunft.
      Scharfe dunkle Kontur statt weichem Schatten, damit es auf der Karte lesbar bleibt, aber nicht verschwimmt. */
   #navBar{position:absolute;top:6px;left:0;right:0;z-index:1000;pointer-events:none;
@@ -160,6 +169,8 @@
     <div id="navEta" hidden><div class="f">🏁</div><div id="navRest"></div><div id="navTime"></div></div>
   </div>
   <button class="sec navbtn" id="menuBtn" aria-label="Menü"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+  <button class="sec navbtn" id="centerBtn" aria-label="Zentrieren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22"/></svg></button>
   <div id="menu" hidden>
     <div class="mhead"><button id="mBack" hidden>‹</button><span id="mTitle">Menü</span><button id="mClose">✕</button></div>
     <div class="mview" data-v="main" data-t="Menü">
@@ -169,6 +180,7 @@
       <button class="mi" data-go="stats">Statistik</button>
       <button class="mi" data-go="pm" id="pmMenu">Powermeter</button>
       <button class="mi" data-go="fb">Feedback</button>
+      <button class="mi warn" id="mRideEnd">Fahrt beenden &amp; speichern</button>
       <button class="mi warn" id="mNavEnd">Navigation beenden</button>
     </div>
     <div class="mview" data-v="dest" data-t="Ziel suchen" hidden>
@@ -189,7 +201,8 @@
     </div>
     <div class="mview" data-v="stats" data-t="Statistik" hidden><div id="statsBox"></div></div>
     <div class="mview" data-v="pm" data-t="Powermeter" hidden>
-      <div class="kv"><div><b id="pmStateV">aus</b><span>Status</span></div><div><b id="pmNameV">–</b><span>Gerät</span></div><div><b id="pmNowV">–</b><span>Watt jetzt</span></div></div>
+      <div class="kv"><div><b id="pmStateV">aus</b><span>Status</span></div><div><b id="pmNameV">–</b><span>Gerät</span></div><div><b id="pmNowV">–</b><span>Watt 3 s</span></div>
+        <div><b id="pwAvg">–</b><span>Ø Watt Fahrt</span></div><div><b id="pwMaxV">–</b><span>Max W (3 s)</span></div><div><b id="cadAvgV">–</b><span>Ø Kadenz</span></div></div>
       <div class="mrow two" id="pmBtns"><button id="pmConn">Verbinden</button><button class="sec" id="pmDisc">Trennen</button></div>
       <div class="navhint" style="text-align:left">Powermeter mit Bluetooth (Leistungsmesser-Standard) – Pedale, Kurbel oder Nabe kurz antreten, damit er aufwacht. Nur-ANT+-Geräte gehen am iPhone nicht.</div>
       <div id="pmNoBt" hidden>
@@ -220,15 +233,10 @@
     <div class="cell"><div class="l">Höhenmeter</div><div class="v" id="alt">0 <small>m</small></div></div>
     <div class="cell"><div class="l">Uhrzeit</div><div class="v" id="clock">--:--</div></div>
   </div>
-  <div class="grid" id="pwGrid" hidden>
-    <div class="cell"><div class="l">Watt 3 s</div><div class="v" id="pw3">-- <small>W</small></div></div>
-    <div class="cell"><div class="l">Ø Watt</div><div class="v" id="pwAvg">-- <small>W</small></div></div>
-    <div class="cell"><div class="l">Kadenz</div><div class="v" id="cad">-- <small>rpm</small></div></div>
-  </div>
-  <div class="btns">
+  <div class="btns" id="btns">
     <button id="startBtn">Start</button>
-    <button class="sec" id="centerBtn">Zentrieren</button>
-    <button class="sec" id="resetBtn">Beenden</button>
+    <div class="cell"><div class="l">Watt</div><div class="v" id="pw3">-- <small>W</small></div></div>
+    <div class="cell"><div class="l">Kadenz</div><div class="v" id="cad">-- <small>rpm</small></div></div>
   </div>
   <div class="status"><span class="dot" id="dot"></span><span id="status">Bereit</span></div>
 </div>
@@ -438,12 +446,14 @@ function pmData(dv){
   renderPw();
 }
 function renderPw(){
-  $('pwGrid').hidden = !PM.ch && !pwN;
+  $('btns').classList.toggle('pw', !!PM.ch || pwN > 0);
   const p = pw3(), c = cadNow();
   $('pw3').innerHTML = (p == null ? '--' : Math.round(p)) + ' <small>W</small>';
-  $('pwAvg').innerHTML = (pwN ? Math.round(pwSum / pwN) : '--') + ' <small>W</small>';
   $('cad').innerHTML = (c == null ? '--' : Math.round(c)) + ' <small>rpm</small>';
   $('pmNowV').textContent = p == null ? '–' : Math.round(p);
+  $('pwAvg').textContent = pwN ? Math.round(pwSum / pwN) : '–';
+  $('pwMaxV').textContent = pwN ? Math.round(pwMax) : '–';
+  $('cadAvgV').textContent = cadN ? Math.round(cadSum / cadN) : '–';
 }
 function pmSet(state){
   PM.state = state;
@@ -678,7 +688,8 @@ $('startBtn').onclick = () => {
   save();
 };
 $('centerBtn').onclick = () => { follow = true; if (map && !nav) map.setZoom(15); camUpdate(true); };
-$('resetBtn').onclick = async () => {
+// Fahrt beenden (Menü): speichern, wenn lang genug, dann alles zurücksetzen
+async function endRide(){
   const worth = distM >= 50 && rec.length > 1;
   if (!confirm(worth ? 'Fahrt beenden und speichern?' : 'Fahrt beenden? (zu kurz zum Speichern)')) return;
   if (worth) {
@@ -694,9 +705,10 @@ $('resetBtn').onclick = async () => {
   pwSum = 0; pwN = 0; pwMax = 0; cadSum = 0; cadN = 0;
   running = false; keepAwake(false);
   $('startBtn').textContent = 'Start'; $('startBtn').classList.remove('pause');
-  render(0);
+  render(0); renderPw();
   save();
-};
+}
+$('mRideEnd').onclick = () => { closeMenu(); endRide(); };
 if (map) {
   map.on('dragstart', () => follow = false);
   // Von Hand gedreht: Folgen aus (wie beim Verschieben); Kompass oder „Zentrieren“ holt es zurück
@@ -1057,6 +1069,7 @@ function showView(v, push){
   const cur = document.querySelector(`#menu .mview[data-v="${v}"]`);
   $('mTitle').textContent = cur.dataset.t; $('mBack').hidden = mStack.length < 2;
   $('mNavEnd').hidden = !nav && !pendingDest;
+  $('mRideEnd').hidden = !running && !rec.length && !movingMs;
   if (v === 'dest') showRecent();
   if (v === 'gpx') showGpxList();
   if (v === 'rides') showRides();

@@ -33,7 +33,7 @@ async def main():
         await pg.goto('http://localhost:8765/'); await pg.wait_for_timeout(2000)
         await pg.click('#menuBtn'); await pg.click('[data-go=pm]'); await pg.wait_for_timeout(300)
         print('ohne BT: Hinweis sichtbar', await pg.is_visible('#pmNoBt'), '| Buttons sichtbar', await pg.is_visible('#pmBtns'),
-              '| URL', await pg.inner_text('#pmUrl'), '| Watt-Zeile', await pg.is_visible('#pwGrid'))
+              '| URL', await pg.inner_text('#pmUrl'), '| Watt-Zeile', await pg.evaluate("$('btns').classList.contains('pw')"))
         await pg.screenshot(path=T+r'\pm_nobt.png'); await ctx.close()
 
         # 2) Mit simuliertem Powermeter
@@ -55,6 +55,13 @@ async def main():
         print('Anzeige: 3s', await pg.inner_text('#pw3'), '| Ø', await pg.inner_text('#pwAvg'), '| Kadenz', await pg.inner_text('#cad'),
               '| pwN', await pg.evaluate('pwN'), '| rec mit Watt', await pg.evaluate('rec.filter(r => r[5] != null).length'), '/', await pg.evaluate('rec.length'))
         await pg.screenshot(path=T+r'\pm_dash.png')
+        await pg.click('#menuBtn'); await pg.wait_for_timeout(300)
+        print('Menü: Fahrt-beenden sichtbar', await pg.is_visible('#mRideEnd'))
+        await pg.click('[data-go=pm]'); await pg.wait_for_timeout(300)
+        print('PM-Menü:', (await pg.inner_text('#menu .mview[data-v=pm] .kv')).replace('\n', ' '))
+        await pg.screenshot(path=T+r'\pm_menu2.png'); await pg.click('#mClose')
+        print('Zentrieren-Knopf:', await pg.evaluate("JSON.stringify($('centerBtn').getBoundingClientRect())"), '| Menü-Knopf', await pg.evaluate("JSON.stringify($('menuBtn').getBoundingClientRect())"))
+        print('Abstand oben (Browser):', await pg.evaluate("getComputedStyle(document.body).paddingTop"))
         # Verbindung reißt ab → Anzeige --, Neuverbindung nach ~2 s
         await pg.evaluate('_fakeDrop()'); await pg.wait_for_timeout(300)
         print('nach Abriss:', await pg.evaluate('PM.state'), '| 3s', await pg.inner_text('#pw3'))
@@ -64,10 +71,10 @@ async def main():
         avg_before = await pg.inner_text('#pwAvg')
         await pg.evaluate('clearInterval(_sim); save()')
         await pg.reload(); await pg.wait_for_timeout(2500)
-        print('nach Neuladen: Ø', await pg.inner_text('#pwAvg'), '(vorher', avg_before + ') | Zeile sichtbar', await pg.is_visible('#pwGrid'), '| 3s', await pg.inner_text('#pw3'))
+        print('nach Neuladen: Ø', await pg.inner_text('#pwAvg'), '(vorher', avg_before + ') | Zeile sichtbar', await pg.evaluate("$('btns').classList.contains('pw')"), '| 3s', await pg.inner_text('#pw3'))
         # Beenden → gespeicherte Fahrt mit Leistung
-        await pg.evaluate('distM = 200'); await pg.click('#resetBtn'); await pg.wait_for_timeout(800)
-        print('nach Beenden Zeile sichtbar:', await pg.is_visible('#pwGrid'))
+        await pg.evaluate('distM = 200'); await pg.evaluate('endRide()'); await pg.wait_for_timeout(800)
+        print('nach Beenden Zeile sichtbar:', await pg.evaluate("$('btns').classList.contains('pw')"))
         await pg.click('#menuBtn'); await pg.click('[data-go=rides]'); await pg.wait_for_timeout(600)
         print('Liste:', (await pg.inner_text('#rideList')).replace('\n', ' | '))
         await pg.click('#rideList li'); await pg.wait_for_timeout(1200)
