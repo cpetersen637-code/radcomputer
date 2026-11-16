@@ -110,6 +110,8 @@
   .msec{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:4px;padding:0 2px}
   .mrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
   .mrow button,.mrow label{padding:10px 6px;font-size:14px}
+  .mrow.two{grid-template-columns:1fr 1fr}
+  #pmUrl{font-family:'JetBrains Mono',monospace;font-size:12px;word-break:break-all;background:var(--bg);border-radius:8px;padding:8px;color:var(--text)}
   label.sec{font:600 14px Inter,sans-serif;border-radius:10px;text-align:center;cursor:pointer;background:var(--bg);color:var(--text);border:1px solid var(--line);padding:12px}
   button.danger{background:var(--bg);color:#ff7b72;border:1px solid var(--line)}
   .kv{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -165,6 +167,7 @@
       <button class="mi" data-go="gpx">Routen (GPX)</button>
       <button class="mi" data-go="rides">Gefahrene Fahrten</button>
       <button class="mi" data-go="stats">Statistik</button>
+      <button class="mi" data-go="pm" id="pmMenu">Powermeter</button>
       <button class="mi" data-go="fb">Feedback</button>
       <button class="mi warn" id="mNavEnd">Navigation beenden</button>
     </div>
@@ -185,6 +188,16 @@
       <div class="mrow"><button class="sec" id="rideFollow">Nachfahren</button><button class="sec" id="rideShare">GPX teilen</button><button class="danger" id="rideDel">Löschen</button></div>
     </div>
     <div class="mview" data-v="stats" data-t="Statistik" hidden><div id="statsBox"></div></div>
+    <div class="mview" data-v="pm" data-t="Powermeter" hidden>
+      <div class="kv"><div><b id="pmStateV">aus</b><span>Status</span></div><div><b id="pmNameV">–</b><span>Gerät</span></div><div><b id="pmNowV">–</b><span>Watt jetzt</span></div></div>
+      <div class="mrow two" id="pmBtns"><button id="pmConn">Verbinden</button><button class="sec" id="pmDisc">Trennen</button></div>
+      <div class="navhint" style="text-align:left">Powermeter mit Bluetooth (Leistungsmesser-Standard) – Pedale, Kurbel oder Nabe kurz antreten, damit er aufwacht. Nur-ANT+-Geräte gehen am iPhone nicht.</div>
+      <div id="pmNoBt" hidden>
+        <div class="navhint" style="text-align:left">Dieser Browser kann kein Bluetooth – Safari und Home-Bildschirm-Apps auf dem iPhone erlauben das nicht. Lösung: die kostenlose App „Bluefy – Web BLE Browser“ installieren und dort diese Adresse öffnen (Fahrten werden dort getrennt von Safari gespeichert):</div>
+        <div id="pmUrl"></div>
+        <button class="sec" id="pmCopy">Adresse kopieren</button>
+      </div>
+    </div>
     <div class="mview" data-v="fb" data-t="Feedback" hidden>
       <textarea id="fbText" placeholder="Was ist dir aufgefallen? Idee, Fehler, Wunsch …"></textarea>
       <button id="fbSend">Senden (GitHub)</button>
@@ -206,6 +219,11 @@
     <div class="cell"><div class="l">Max</div><div class="v" id="max">0.0 <small>km/h</small></div></div>
     <div class="cell"><div class="l">Höhenmeter</div><div class="v" id="alt">0 <small>m</small></div></div>
     <div class="cell"><div class="l">Uhrzeit</div><div class="v" id="clock">--:--</div></div>
+  </div>
+  <div class="grid" id="pwGrid" hidden>
+    <div class="cell"><div class="l">Watt 3 s</div><div class="v" id="pw3">-- <small>W</small></div></div>
+    <div class="cell"><div class="l">Ø Watt</div><div class="v" id="pwAvg">-- <small>W</small></div></div>
+    <div class="cell"><div class="l">Kadenz</div><div class="v" id="cad">-- <small>rpm</small></div></div>
   </div>
   <div class="btns">
     <button id="startBtn">Start</button>
@@ -320,9 +338,11 @@ function addPoint(pt, newSeg){
   if (newSeg && seg.length) { seg = []; trackSegs.push(seg); }
   seg.push([pt.lat, pt.lon]);
   drawTrack();
-  rec.push([+pt.lat.toFixed(6), +pt.lon.toFixed(6), Math.round(pt.t / 1000), pt.ele == null ? null : Math.round(pt.ele), newSeg ? 1 : 0]);
+  const r = [+pt.lat.toFixed(6), +pt.lon.toFixed(6), Math.round(pt.t / 1000), pt.ele == null ? null : Math.round(pt.ele), newSeg ? 1 : 0];
+  if (PM.ch) { r.push(pmFresh() ? PM.w : 0); const c = cadNow(); if (c != null) r.push(Math.round(c)); }
+  rec.push(r);
 }
-// Aufzeichnung für Fahrtenliste/GPX: [lat, lon, Zeit (s), Höhe (m) | null, 1 = neuer Abschnitt]
+// Aufzeichnung für Fahrtenliste/GPX: [lat, lon, Zeit (s), Höhe (m) | null, 1 = neuer Abschnitt, Watt?, Kadenz?]
 let rec = [];
 const trackPoints = () => trackSegs.reduce((n, s) => n + s.length, 0);
 
@@ -387,6 +407,97 @@ let lastGood = null;    // letzter Punkt der gefahrenen Strecke (Distanz wird ab
 let spdHist = [];       // letzte Tempo-Rohwerte, Median gegen Ausreißer
 let climbM = 0, descM = 0, altRef = null, altSmooth = null;  // Höhenmeter bergauf/bergab
 let wakeLock = null;
+
+// ---- Powermeter per Bluetooth (Cycling Power Service 0x1818, Messwert 0x2A63) ----
+// Safari/iOS hat kein Web Bluetooth; in Bluefy, Chrome (Android/PC) und Edge geht es.
+const PM = {dev:null, ch:null, state:'aus', w:0, cad:null, at:0, cadAt:0, crank:null, hist:[], want:false, retry:0};
+let pwSum = 0, pwN = 0, pwMax = 0, cadSum = 0, cadN = 0;   // Fahrt: Summe Watt (1 Wert/s), Sekunden, Max (3 s), Kadenz
+const hasBt = () => !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
+// Leistung jetzt bzw. 3-s-Schnitt; nach 3 s ohne Daten 0 (manche Geräte senden beim Rollen nichts)
+const pmFresh = () => PM.ch && Date.now() - PM.at < 3000;
+function pw3(){
+  if (!PM.ch) return null;
+  const now = Date.now(), h = PM.hist.filter(x => now - x.t <= 3000);
+  return h.length ? h.reduce((a, x) => a + x.w, 0) / h.length : 0;
+}
+const cadNow = () => !PM.ch ? null : (pmFresh() && PM.cad != null && Date.now() - PM.cadAt < 3000 ? PM.cad : 0);
+function pmData(dv){
+  const f = dv.getUint16(0, true), now = Date.now();
+  PM.w = Math.max(0, dv.getInt16(2, true)); PM.at = now;
+  PM.hist.push({t:now, w:PM.w}); PM.hist = PM.hist.filter(x => now - x.t <= 3000);
+  // Kurbeldaten (Flag-Bit 5): Umdrehungen + Zeit (1/1024 s) → Trittfrequenz; davor optionale Felder überspringen
+  let o = 4; if (f & 1) o += 1; if (f & 4) o += 2; if (f & 16) o += 6;
+  if (f & 32 && dv.byteLength >= o + 4) {
+    const revs = dv.getUint16(o, true), t = dv.getUint16(o + 2, true);
+    if (PM.crank) {
+      const dr = (revs - PM.crank.revs + 65536) % 65536, dt = ((t - PM.crank.t + 65536) % 65536) / 1024;
+      if (dr > 0 && dt > 0) { const c = dr / dt * 60; if (c < 220) { PM.cad = c; PM.cadAt = now; } }
+    }
+    PM.crank = {revs, t};
+  }
+  renderPw();
+}
+function renderPw(){
+  $('pwGrid').hidden = !PM.ch && !pwN;
+  const p = pw3(), c = cadNow();
+  $('pw3').innerHTML = (p == null ? '--' : Math.round(p)) + ' <small>W</small>';
+  $('pwAvg').innerHTML = (pwN ? Math.round(pwSum / pwN) : '--') + ' <small>W</small>';
+  $('cad').innerHTML = (c == null ? '--' : Math.round(c)) + ' <small>rpm</small>';
+  $('pmNowV').textContent = p == null ? '–' : Math.round(p);
+}
+function pmSet(state){
+  PM.state = state;
+  $('pmStateV').textContent = state;
+  let nm = null; try { nm = localStorage.getItem('pmName'); } catch(_) {}
+  $('pmNameV').textContent = (PM.dev && PM.dev.name) || nm || '–';
+  $('pmMenu').textContent = 'Powermeter' + (PM.ch ? ' · verbunden' : '');
+  $('pmConn').textContent = PM.ch ? 'Anderes Gerät' : 'Verbinden';
+  $('pmDisc').disabled = !PM.dev;
+  renderPw();
+}
+async function pmConnect(dev){
+  if (PM.dev !== dev) {
+    PM.dev = dev; PM.crank = null;
+    dev.addEventListener('gattserverdisconnected', () => { if (PM.dev === dev) pmLost(); });
+  }
+  PM.want = true; pmSet('verbinde …');
+  const srv = await dev.gatt.connect();
+  const ch = await (await srv.getPrimaryService(0x1818)).getCharacteristic(0x2a63);
+  ch.addEventListener('characteristicvaluechanged', e => { if (PM.ch === ch) pmData(e.target.value); });
+  PM.ch = ch; PM.hist = []; PM.at = Date.now();
+  await ch.startNotifications();
+  PM.retry = 0;
+  try { localStorage.setItem('pmName', dev.name || 'Powermeter'); localStorage.setItem('pmId', dev.id); } catch(_) {}
+  pmSet('verbunden');
+}
+// Verbindung verloren (Gerät schläft, außer Reichweite): mit wachsender Pause neu versuchen, solange gewollt
+function pmLost(){
+  PM.ch = null; PM.cad = null;
+  if (!PM.want || !PM.dev) { pmSet('aus'); return; }
+  pmSet('getrennt, verbinde neu …');
+  const dev = PM.dev;
+  setTimeout(() => { if (PM.want && PM.dev === dev && !PM.ch) pmConnect(dev).catch(pmLost); }, Math.min(30000, 2000 * ++PM.retry));
+}
+async function pmPick(){
+  let dev;
+  try { dev = await navigator.bluetooth.requestDevice({filters:[{services:[0x1818]}]}); }
+  catch(e) { if (e.name !== 'NotFoundError') alert('Bluetooth: ' + e.message); return; }   // NotFoundError = Auswahl abgebrochen
+  if (PM.dev && PM.dev !== dev) { const old = PM.dev; PM.dev = null; PM.ch = null; try { old.gatt.disconnect(); } catch(_) {} }
+  try { await pmConnect(dev); } catch(e) { pmSet('Fehler'); alert('Verbinden fehlgeschlagen: ' + e.message); PM.want = false; }
+}
+function pmOff(){
+  PM.want = false; const d = PM.dev; PM.ch = null; PM.dev = null;
+  try { d && d.gatt.disconnect(); } catch(_) {}
+  try { localStorage.removeItem('pmId'); } catch(_) {}
+  pmSet('aus');
+}
+// Nach Neuladen: zuletzt gewähltes Gerät ohne Auswahldialog wieder verbinden (nur wo der Browser getDevices kann)
+async function pmAuto(){
+  let id = null; try { id = localStorage.getItem('pmId'); } catch(_) {}
+  if (!id || !hasBt() || !navigator.bluetooth.getDevices) return;
+  try { const dev = (await navigator.bluetooth.getDevices()).find(d => d.id === id); if (dev) await pmConnect(dev); }
+  catch(_) { pmLost(); }
+}
 
 const $ = id => document.getElementById(id);
 const fmtTime = ms => { const s = Math.floor(ms/1000);
@@ -474,7 +585,7 @@ function onPos(p){
 function save(){
   try {
     localStorage.setItem('ride', JSON.stringify({
-      distM, maxKmh, movingMs, running, climbM, descM, rec,
+      distM, maxKmh, movingMs, running, climbM, descM, rec, pwSum, pwN, pwMax, cadSum, cadN,
       track: trackSegs.map(s => s.map(p => [+p[0].toFixed(6), +p[1].toFixed(6)]))
     }));
   } catch(_) {}
@@ -485,6 +596,7 @@ function restore(){
     if (!r) return;
     distM = r.distM || 0; maxKmh = r.maxKmh || 0; movingMs = r.movingMs || 0;
     climbM = r.climbM || 0; descM = r.descM || 0; rec = r.rec || [];
+    pwSum = r.pwSum || 0; pwN = r.pwN || 0; pwMax = r.pwMax || 0; cadSum = r.cadSum || 0; cadN = r.cadN || 0;
     let segs = r.track || [];
     if (segs.length && typeof segs[0][0] === 'number') segs = [segs];  // altes Format: eine flache Liste
     trackSegs = segs.length ? segs : [[]]; drawTrack();
@@ -541,8 +653,16 @@ setInterval(() => {
     window._kmh = 0; $('speed').textContent = '0.0';
     $('dot').classList.remove('on'); $('status').textContent = 'Kein GPS-Signal';
   }
-  if (running && lastTick && fresh && (window._kmh || 0) > 0) movingMs += now - lastTick;
+  if (running && lastTick && fresh && (window._kmh || 0) > 0) {
+    movingMs += now - lastTick;
+    // Leistung: ein Wert pro Fahrsekunde (Rollen ohne Treten zählt als 0 W mit, wie bei Garmin)
+    if (PM.ch) {
+      pwSum += pmFresh() ? PM.w : 0; pwN++; pwMax = Math.max(pwMax, pw3());
+      const c = cadNow(); if (c > 0) { cadSum += c; cadN++; }
+    }
+  }
   lastTick = now;
+  renderPw();
   $('clock').textContent = new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
   if (running) $('time').textContent = fmtTime(movingMs);
 }, 1000);
@@ -563,12 +683,15 @@ $('resetBtn').onclick = async () => {
   if (!confirm(worth ? 'Fahrt beenden und speichern?' : 'Fahrt beenden? (zu kurz zum Speichern)')) return;
   if (worth) {
     try { await DB.put('rides', {id: Date.now(), start: rec[0][2] * 1000, end: rec[rec.length-1][2] * 1000,
-      dist: distM, moving: movingMs, max: maxKmh, climb: climbM, desc: descM, rec}); }
+      dist: distM, moving: movingMs, max: maxKmh, climb: climbM, desc: descM, rec,
+      ...(pwN ? {avgW: Math.round(pwSum / pwN), maxW: Math.round(pwMax), kj: Math.round(pwSum / 1000),
+                 avgCad: cadN ? Math.round(cadSum / cadN) : null} : {})}); }
     catch(e) { alert('Speichern fehlgeschlagen: ' + e.message); return; }
   }
   rec = [];
   distM = 0; maxKmh = 0; movingMs = 0; trackSegs = [[]]; drawTrack(); newSeg = true;
   climbM = 0; descM = 0; altRef = null; lastGood = null; spdHist = [];
+  pwSum = 0; pwN = 0; pwMax = 0; cadSum = 0; cadN = 0;
   running = false; keepAwake(false);
   $('startBtn').textContent = 'Start'; $('startBtn').classList.remove('pause');
   render(0);
@@ -938,6 +1061,7 @@ function showView(v, push){
   if (v === 'gpx') showGpxList();
   if (v === 'rides') showRides();
   if (v === 'stats') showStats();
+  if (v === 'pm') { $('pmNoBt').hidden = hasBt(); $('pmBtns').hidden = !hasBt(); $('pmUrl').textContent = location.href.split('#')[0]; pmSet(PM.state); }
   if (v === 'fb') { try { $('fbText').value = localStorage.getItem('fbDraft') || ''; } catch(_) {} }
 }
 function openMenu(){ mStack = []; $('menu').hidden = false; showView('main'); }
@@ -1040,7 +1164,7 @@ async function showRides(){
   list.sort((a, b) => b.start - a.start).forEach(r => {
     const li = document.createElement('li');
     li.innerHTML = `<div class="grow">${fmtDate(r.start)}, ${new Date(r.start).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})}
-      <small>${km(r.dist)} km · ${fmtHM(r.moving)} · ↑${Math.round(r.climb)} m</small></div>`;
+      <small>${km(r.dist)} km · ${fmtHM(r.moving)} · ↑${Math.round(r.climb)} m${r.avgW != null ? ` · Ø ${r.avgW} W` : ''}</small></div>`;
     li.onclick = () => showRide(r);
     ul.appendChild(li);
   });
@@ -1049,7 +1173,8 @@ function showRide(r){
   curRide = r;
   const avg = r.moving > 0 ? r.dist / 1000 / (r.moving / 3600000) : 0;
   $('rideInfo').innerHTML = [[km(r.dist) + ' km', 'Distanz'], [fmtHM(r.moving), 'Fahrzeit'], [avg.toFixed(1).replace('.', ','), 'Schnitt km/h'],
-    [r.max.toFixed(1).replace('.', ','), 'Max km/h'], ['↑' + Math.round(r.climb), 'Höhenmeter'], ['↓' + Math.round(r.desc || 0), 'Abwärts']]
+    [r.max.toFixed(1).replace('.', ','), 'Max km/h'], ['↑' + Math.round(r.climb), 'Höhenmeter'], ['↓' + Math.round(r.desc || 0), 'Abwärts'],
+    ...(r.avgW != null ? [[r.avgW, 'Ø Watt'], [r.maxW, 'Max W (3 s)'], [r.kj, 'Arbeit kJ']].concat(r.avgCad ? [[r.avgCad, 'Ø Kadenz']] : []) : [])]
     .map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
   showView('ride');
   $('mTitle').textContent = fmtDate(r.start);
@@ -1062,12 +1187,16 @@ function showRide(r){
 }
 function rideGpx(r){
   const iso = s => new Date(s * 1000).toISOString();
-  let out = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Radcomputer" xmlns="http://www.topografix.com/GPX/1/1">\n`
+  // Watt/Kadenz im üblichen Garmin-Format (<power> + TrackPointExtension), das lesen Strava, Komoot, Golden Cheetah usw.
+  const ext = p => p[5] == null ? '' : `<extensions><power>${p[5]}</power>`
+    + (p[6] == null ? '' : `<gpxtpx:TrackPointExtension><gpxtpx:cad>${p[6]}</gpxtpx:cad></gpxtpx:TrackPointExtension>`) + '</extensions>';
+  let out = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Radcomputer" xmlns="http://www.topografix.com/GPX/1/1"`
+    + ` xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">\n`
     + `<metadata><time>${iso(r.rec[0][2])}</time></metadata>\n<trk><name>Radfahrt ${fmtDate(r.start)}</name><type>cycling</type>\n`;
   let open = false;
   for (const p of r.rec) {
     if (p[4] || !open) { if (open) out += '</trkseg>\n'; out += '<trkseg>\n'; open = true; }
-    out += `<trkpt lat="${p[0]}" lon="${p[1]}">${p[3] == null ? '' : `<ele>${p[3]}</ele>`}<time>${iso(p[2])}</time></trkpt>\n`;
+    out += `<trkpt lat="${p[0]}" lon="${p[1]}">${p[3] == null ? '' : `<ele>${p[3]}</ele>`}<time>${iso(p[2])}</time>${ext(p)}</trkpt>\n`;
   }
   return out + (open ? '</trkseg>\n' : '') + '</trk>\n</gpx>\n';
 }
@@ -1102,6 +1231,7 @@ $('fbSend').onclick = async () => {
     `Gerät: ${navigator.userAgent.match(/\(([^)]+)\)/)?.[1] || navigator.userAgent} · ${innerWidth}×${innerHeight} @${devicePixelRatio}x`,
     `Ansicht: ${nav ? 'Navigation ' + (nav.mode === 'gpx' ? '(GPX)' : '(Route)') : 'ohne Navi'} · ${orient === 'hdg' ? 'Fahrtrichtung oben' : 'Norden oben'}` +
       ` · Aufzeichnung ${running ? 'läuft' : 'aus'}`,
+    `Powermeter: ${PM.state}${hasBt() ? '' : ' (Browser ohne Bluetooth)'}`,
     `Zeit: ${new Date().toLocaleString('de-DE')}`];
   const title = text.split('\n')[0].slice(0, 70);
   const body = `${text}\n\n---\n${info.map(l => '- ' + l).join('\n')}\n\n_aus der App gesendet_`;
@@ -1135,8 +1265,13 @@ async function showStats(){
     + `<div><b>${km(lng.dist)}</b><span>Längste km</span></div>`
     + `<div><b>${fast.max.toFixed(1).replace('.', ',')}</b><span>Max km/h</span></div>`
     + `<div><b>↑${Math.round(high.climb)}</b><span>Meiste Hm</span></div>`
-    + (avgOf(avg) ? `<div><b>${avgOf(avg).toFixed(1).replace('.', ',')}</b><span>Bester Schnitt</span></div>` : '')
-    + '</div>';
+    + (avgOf(avg) ? `<div><b>${avgOf(avg).toFixed(1).replace('.', ',')}</b><span>Bester Schnitt</span></div>` : '');
+  const pw = rides.filter(r => r.avgW != null);
+  if (pw.length) {
+    const mw = pw.reduce((m, r) => r.maxW > m.maxW ? r : m), aw = pw.reduce((m, r) => r.avgW > m.avgW ? r : m);
+    html += `<div><b>${mw.maxW}</b><span>Max Watt</span></div><div><b>${aw.avgW}</b><span>Bestes Ø Watt</span></div>`;
+  }
+  html += '</div>';
   box.innerHTML = html;
 }
 
@@ -1167,8 +1302,17 @@ function restoreNav(){
   try { const n = JSON.parse(localStorage.getItem('nav') || 'null'); if (n && n.pts && n.pts.length > 1) setNav(n, false); } catch(_) {}
 }
 
+$('pmConn').onclick = pmPick;
+$('pmDisc').onclick = pmOff;
+$('pmCopy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('pmUrl').textContent); $('pmCopy').textContent = 'Kopiert ✓'; }
+  catch(_) { getSelection().selectAllChildren($('pmUrl')); $('pmCopy').textContent = 'Markiert – jetzt kopieren'; }
+};
+
 restore();
 restoreNav();
+pmSet('aus');
+pmAuto();
 startGps(); // Position schon vor dem Start anzeigen
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

@@ -30,6 +30,7 @@ Ein einfacher Fahrradcomputer als Web-App (PWA) fürs iPhone: Karte mit gefahren
 - **Schnitt:** Distanz ÷ Bewegungszeit. **Max:** höchstes geglättetes Tempo bei guter Genauigkeit.
 - **Höhenmeter:** Summe der Anstiege (↑). GPS-Höhe wird geglättet (gleitender Mittelwert), gezählt wird erst ab 5 m Änderung (Glättungsfaktor 0,15, per Simulation abgestimmt), Punkte mit Höhengenauigkeit > 25 m werden ignoriert. Abstieg wird intern mitgezählt (`descM`), aber nicht angezeigt.
 - **Menü** (☰ unten links auf der Karte): **Feedback** (Textfeld, Entwurf in `localStorage` `fbDraft`; „Senden“ öffnet ein vorausgefülltes GitHub-Issue in diesem Repo mit App-Version, Gerät und Ansicht, ohne Standort. Feedback also unter Issues nachsehen), Ziel suchen (mit „Letzte Ziele“, max. 8, `localStorage` `recent`), Routen (GPX laden/gespeicherte Routen), Gefahrene Fahrten (Liste → Strecke auf der Karte, Werte, **GPX teilen** über das iOS-Teilen-Menü bzw. Download, Nachfahren, Löschen), Statistik (Woche/Monat/Jahr/Gesamt: Fahrten, km, Zeit, Höhenmeter + Rekorde), „Navigation beenden“ bei aktiver Navi.
+- **Powermeter** (Menü → Powermeter, seit 16.11.2026): Bluetooth-Leistungsmesser (Cycling Power Service 0x1818) per Web Bluetooth. Anzeige-Zeile Watt 3 s / Ø Watt / Kadenz erscheint nur bei verbundenem Gerät oder wenn die Fahrt Leistungsdaten hat. Ø zählt pro Fahrsekunde (Rollen = 0 W), Max = bester 3-s-Wert. Gespeichert: `avgW`, `maxW`, `kj`, `avgCad` je Fahrt, Watt/Kadenz als Index 5/6 in `rec`, GPX mit `<power>` + `gpxtpx:cad` (Garmin-Format). Bei Verbindungsabriss automatische Neuverbindung. **Safari/Home-Bildschirm-App auf iOS haben kein Web Bluetooth** → dort erscheint ein Hinweis, die App in **Bluefy** zu öffnen (Fahrten/Einstellungen liegen dort getrennt von Safari; nach Neuladen in Bluefy neu „Verbinden“ tippen, falls `getDevices` fehlt). Nur-ANT+-Geräte gehen am iPhone nicht.
 - **Beenden** (früher Reset): speichert die Fahrt (ab 50 m) in IndexedDB (`radcomputer` → `rides`) und setzt zurück. Aufgezeichnet wird dafür `rec` = [lat, lon, Zeit s, Höhe, Abschnittsbeginn]. GPX-Routen liegen in `gpx`.
 - **Navigation** (Ziel über das Menü):
   - Ziel per **Adresssuche** (Nominatim/OSM, bevorzugt Treffer in der Nähe), **letzte Ziele**, **langes Drücken auf die Karte** oder **GPX-Route** (z. B. aus Komoot/Strava).
@@ -125,6 +126,7 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 6. **Heller Modus / Sonnenlicht-Modus** (hoher Kontrast bei Sonne).
 7. **MapLibre lokal einbinden** statt über unpkg (dann keine Abhängigkeit von einem CDN; Dateien in den Ordner legen und in `sw.js` cachen).
 8. **Später evtl. native iOS-App** (Swift/SwiftUI oder Flutter), die auch bei gesperrtem Bildschirm aufzeichnet und Bluetooth-Sensoren (Trittfrequenz, Puls) kann. Braucht einen Mac + Apple-Entwicklerkonto (99 €/Jahr). Bei einem Firmen-iPhone evtl. durch MDM eingeschränkt.
+9. **Powermeter in Bluefy auf dem iPhone testen** (Verbinden, Keep-Awake, Vollbild/Statusleiste dort). Pulsgurt (Heart Rate Service 0x180D) ließe sich genauso anbinden.
 
 ---
 
@@ -140,6 +142,7 @@ Nach Priorität. Vor dem Umsetzen kurz mit dem Nutzer abstimmen.
 - `rc_compass.py` – Kompass umschalten, Drehen von Hand → Folgen aus, Zentrieren; Feedback-URL (Titel/Text/Infos)
 - `rc_heading.py` – ohne Navi: Karte dreht in Fahrtrichtung (mit/ohne GPS-Kurs), bleibt im Stand ruhig
 - `rc_sim.py` – simulierte Fahrt mit Tempo-Ausreißern, GPS-Sprüngen und Höhenrauschen (prüft Filter, Max, Höhenmeter)
+- `rc_power.py` – simuliertes Bluetooth-Powermeter: Bluefy-Hinweis ohne BT, Verbinden, Anzeige, Abriss/Neuverbindung, Neuladen, gespeicherte Fahrt, GPX mit Watt/Kadenz, Statistik
 - `rc_menu.py` – Beenden/Speichern, Fahrtenliste, GPX-Export, Statistik, GPX-Import, letzte Ziele
 - `rc_alt.py`, `rc_pick.py` – Routenauswahl, removeBacktracks, Neuberechnung
 - `rc_nav3.py` – Navi-Anzeige; `rc_test.py` – Pause/Signalverlust/Abschnitte
