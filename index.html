@@ -562,7 +562,7 @@ function onPos(p){
   const pt = {lat:c.latitude, lon:c.longitude, t:now, acc:c.accuracy, ele:c.altitude};
   lastFixAt = Date.now();
   $('dot').classList.add('on');
-  $('status').textContent = `GPS ±${Math.round(c.accuracy)} m`;
+  $('status').textContent = `GPS ±${Math.round(c.accuracy)} m`; gpsErr = '';
   updateAlt(c);
 
   if (me) { me.setLngLat([pt.lon, pt.lat]); if (!meOn) { me.addTo(map); meOn = true; } }
@@ -614,16 +614,32 @@ function restore(){
   } catch(_) {}
 }
 
+let gpsErr = '';   // letzte Fehlermeldung (auch fürs Feedback)
 function onErr(e){
+  if (Date.now() - lastFixAt < 5000) return;   // Abfrage-Fehler stören nicht, solange frische Punkte kommen
   $('dot').classList.remove('on');
-  $('status').textContent = e.code === 1 ? 'Standortzugriff verweigert' :
-    'GPS-Fehler: ' + e.message + (location.protocol !== 'https:' && location.hostname !== 'localhost' ? ' (HTTPS nötig)' : '');
+  gpsErr = `Code ${e.code}: ${e.message || '-'}`;
+  $('status').textContent = e.code === 1 ? 'Standortzugriff verweigert (Einstellungen → Browser → Standort)' :
+    e.code === 3 ? 'Suche GPS … (noch kein Signal)' :
+    'GPS-Fehler: ' + (e.message || e.code) + (location.protocol !== 'https:' && location.hostname !== 'localhost' ? ' (HTTPS nötig)' : '');
 }
 
+// Manche Browser (z. B. In-App-/BLE-Browser wie Bluefy) liefern über watchPosition nichts.
+// Darum zusätzlich alle 2 s einzeln abfragen, solange seit 4 s kein Punkt kam.
+let gpsSince = 0, gpsPollOn = false, gpsBy = '';
 function startGps(){
-  if (!('geolocation' in navigator)) { $('status').textContent = 'Kein GPS verfügbar'; return; }
-  if (watchId === null)
-    watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy:true, maximumAge:0, timeout:15000});
+  if (!('geolocation' in navigator)) { $('status').textContent = 'Kein GPS verfügbar (Browser)'; return; }
+  if (watchId !== null) return;
+  gpsSince = Date.now();
+  $('status').textContent = 'Suche GPS …';
+  watchId = navigator.geolocation.watchPosition(p => { gpsBy = 'watch'; onPos(p); }, onErr, {enableHighAccuracy:true, maximumAge:0, timeout:15000});
+  setInterval(() => {
+    if (Date.now() - lastFixAt < 4000 || Date.now() - gpsSince < 4000 || gpsPollOn) return;
+    gpsPollOn = true;
+    navigator.geolocation.getCurrentPosition(p => { gpsPollOn = false; if (Date.now() - lastFixAt >= 1500) { gpsBy = 'poll'; onPos(p); } },
+      e => { gpsPollOn = false; onErr(e); }, {enableHighAccuracy:true, maximumAge:1000, timeout:10000});
+    if (!lastFixAt && !gpsErr) $('status').textContent = `Suche GPS … ${Math.round((Date.now() - gpsSince) / 1000)} s`;
+  }, 2000);
 }
 
 // ---- Bildschirm anlassen ----
@@ -1243,6 +1259,7 @@ $('fbSend').onclick = async () => {
     `Ansicht: ${nav ? 'Navigation ' + (nav.mode === 'gpx' ? '(GPX)' : '(Route)') : 'ohne Navi'} · ${orient === 'hdg' ? 'Fahrtrichtung oben' : 'Norden oben'}` +
       ` · Aufzeichnung ${running ? 'läuft' : 'aus'}`,
     `Powermeter: ${PM.state}${hasBt() ? '' : ' (Browser ohne Bluetooth)'}`,
+    `GPS: ${lastFixAt ? 'letzter Punkt vor ' + Math.round((Date.now() - lastFixAt) / 1000) + ' s über ' + gpsBy : 'noch kein Punkt'}${gpsErr ? ' · Fehler ' + gpsErr : ''}`,
     `Zeit: ${new Date().toLocaleString('de-DE')}`];
   const title = text.split('\n')[0].slice(0, 70);
   const body = `${text}\n\n---\n${info.map(l => '- ' + l).join('\n')}\n\n_aus der App gesendet_`;
